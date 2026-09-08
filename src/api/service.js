@@ -23,7 +23,33 @@ const mapOrder=o=>({id:`CMD-${o.id}`,rawId:o.id,status:STATUS_LABELS[o.status]||
 export async function getMyOrders(){ const {data,error}=await supabase.from('orders').select('id,total,status,created_at,profile:profiles(first_name,last_name,email),order_items(product_id,product_name,unit_price,quantity)').order('created_at',{ascending:false}); if(error) throw new Error(error.message); return data.map(mapOrder); }
 export const mapStatusLabel=s=>STATUS_LABELS[s]||s; export const mapStatusValue=s=>STATUS_VALUES[s]||'pending';
 export async function createOrder({items,address,paymentMethod,deliveryMethod}){ let addressId=null; if(address?.trim()){const {data,error}=await supabase.from('addresses').insert({label:'Livraison',street:address.trim()}).select('id').single();if(error)throw new Error(error.message);addressId=data.id;} const {data,error}=await supabase.rpc('create_order',{p_items:items.map(i=>({product_id:i.id,quantity:i.quantity})),p_address_id:addressId,p_payment_method:paymentMethod||null,p_delivery_method:deliveryMethod||null}); if(error)throw new Error(error.message); return {id:`CMD-${data.id}`,rawId:data.id}; }
-export async function getDashboardStats(){ const [u,o,p,i,s]=await Promise.all([supabase.from('profiles').select('id',{count:'exact',head:true}).eq('role','user'),supabase.from('orders').select('id,total,status,created_at'),supabase.from('products').select('id,stock',{count:'exact'}),supabase.from('interactions').select('type'),supabase.from('orders').select('total').neq('status','cancelled')]); const orders=o.data||[], interactions=i.data||[]; const sales=(s.data||[]).reduce((a,x)=>a+Number(x.total),0); const users=u.count||0; const conversion=users?Number((orders.length/users*100).toFixed(1)):0; const views=interactions.filter(x=>x.type==='view').length,carts=interactions.filter(x=>x.type==='add_to_cart').length; return {sales,users,orders:orders.length,conversion,ctr:views?Number((carts/views*100).toFixed(1)):0,lowStock:(p.data||[]).filter(x=>x.stock<15).length,chart:Array.from({length:12},(_,n)=>orders.filter(x=>new Date(x.created_at).getMonth()===n).length)}; }
+export async function getDashboardStats(){
+  const [u,o,p,i]=await Promise.all([
+    supabase.from('profiles').select('id',{count:'exact',head:true}).eq('role','user'),
+    supabase.from('orders').select('id,total,status,created_at'),
+    supabase.from('products').select('id,stock',{count:'exact'}),
+    supabase.from('interactions').select('type')
+  ]);
+
+  const orders = o.data || [];
+  const interactions = i.data || [];
+  const deliveredOrders = orders.filter(x => x.status === 'delivered');
+  const sales = deliveredOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const users = u.count || 0;
+  const conversion = users ? Number((deliveredOrders.length / users * 100).toFixed(1)) : 0;
+  const views = interactions.filter(x => x.type === 'view').length;
+  const carts = interactions.filter(x => x.type === 'add_to_cart').length;
+
+  return {
+    sales,
+    users,
+    orders: orders.length,
+    conversion,
+    ctr: views ? Number((carts / views * 100).toFixed(1)) : 0,
+    lowStock: (p.data || []).filter(x => x.stock < 15).length,
+    chart: Array.from({ length: 12 }, (_, month) => orders.filter(x => new Date(x.created_at).getMonth() === month && x.status === 'delivered').length)
+  };
+}
 export async function adminGetProducts(){const {data,error}=await supabase.from('products').select(`${PRODUCT_SELECT},reviews(rating)`).order('created_at',{ascending:false});if(error)throw new Error(error.message);return data.map(p=>({...mapProduct(p),rating:p.reviews?.length?p.reviews.reduce((a,r)=>a+Number(r.rating),0)/p.reviews.length:0,reviews:p.reviews?.length||0,__existing:true}));}
 async function uploadProductImage(image){ if(!image||!image.startsWith('data:'))return image||null; const res=await fetch(image);const blob=await res.blob();const ext=blob.type.split('/')[1]||'jpg';const path=`${crypto.randomUUID()}.${ext}`;const {error}=await supabase.storage.from('product-images').upload(path,blob,{contentType:blob.type,upsert:false});if(error)throw new Error(error.message);const {data}=supabase.storage.from('product-images').getPublicUrl(path);return data.publicUrl; }
 export async function adminSaveProduct(form){const cats=await getCategories();const cat=cats.find(c=>c.name===form.category);const image=await uploadProductImage(form.image);const payload={name:form.name.trim(),description:form.description||'',price:Number(form.price)||0,category_id:cat?.id||null,stock:Number(form.stock)||0,images:image?[image]:[],tags:Array.isArray(form.tags)?form.tags:[]};let result;if(form.id&&form.__existing)result=await supabase.from('products').update(payload).eq('id',form.id).select(`${PRODUCT_SELECT}`).single();else result=await supabase.from('products').insert(payload).select(`${PRODUCT_SELECT}`).single();if(result.error)throw new Error(result.error.message);return mapProduct(result.data);}
@@ -31,4 +57,29 @@ export const adminDeleteProduct=id=>supabase.from('products').delete().eq('id',i
 export async function adminGetUsers(){const {data,error}=await supabase.from('profiles').select('id,first_name,last_name,email,phone,role,status,created_at').order('created_at',{ascending:false});if(error)throw new Error(error.message);return data.map(u=>({id:u.id,name:`${u.first_name} ${u.last_name}`.trim(),email:u.email,status:u.status==='active'?'Actif':'Suspendu',role:u.role,createdAt:u.created_at}));}
 export const adminSetUserStatus=async(id,status)=>{const {data,error}=await supabase.rpc('admin_set_user_status',{p_user_id:id,p_status:status==='Actif'?'active':'suspended'});if(error)throw new Error(error.message);return data;};
 export async function adminGetOrders(){const {data,error}=await supabase.from('orders').select('id,total,status,created_at,profile:profiles(first_name,last_name,email),order_items(product_id,product_name,unit_price,quantity)').order('created_at',{ascending:false});if(error)throw new Error(error.message);return data.map(mapOrder);}
-export const adminUpdateOrderStatus=async(rawId,statusLabel)=>{const {data,error}=await supabase.from('orders').update({status:mapStatusValue(statusLabel),updated_at:new Date().toISOString()}).eq('id',rawId).select().single();if(error)throw new Error(error.message);return data;};
+export const adminUpdateOrderStatus=async(rawId,statusLabel)=>{
+  const nextStatus = mapStatusValue(statusLabel);
+  const { data: currentOrder, error: currentError } = await supabase.from('orders').select('id,status').eq('id', rawId).single();
+  if (currentError) throw new Error(currentError.message);
+  if (currentOrder.status === 'delivered' && nextStatus !== 'delivered') {
+    throw new Error('La commande livrée ne peut plus être modifiée.');
+  }
+
+  if (nextStatus === 'cancelled' && currentOrder.status !== 'cancelled') {
+    const { data: items, error: itemsError } = await supabase.from('order_items').select('product_id,quantity').eq('order_id', rawId);
+    if (itemsError) throw new Error(itemsError.message);
+
+    for (const item of items || []) {
+      if (!item.product_id) continue;
+      const { data: product, error: productError } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
+      if (productError) throw new Error(productError.message);
+      const restoredStock = Number(product.stock || 0) + Number(item.quantity || 0);
+      const { error: updateError } = await supabase.from('products').update({ stock: restoredStock, updated_at: new Date().toISOString() }).eq('id', item.product_id);
+      if (updateError) throw new Error(updateError.message);
+    }
+  }
+
+  const { data, error } = await supabase.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', rawId).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+};

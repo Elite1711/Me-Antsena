@@ -6,23 +6,23 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: "#FFF1F1",
-          100: "#FBE0F9",
-          200: "#E9B3FB",
-          300: "#D58AF3",
-          400: "#A94DEB",
-          500: "#6F00FF",
-          600: "#5F00DB",
-          700: "#4F00B8",
-          800: "#3B0270",
-          900: "#270149"
+          50: "#FDE8F8",
+          100: "#F7D0F1",
+          200: "#F0A8E7",
+          300: "#E27AF6",
+          400: "#B75DFF",
+          500: "#5B1FA3",
+          600: "#431B83",
+          700: "#2A0F52",
+          800: "#18072D",
+          900: "#0D0318"
         },
-        accent: "#E9B3FB",
-        pink: "#E9B3FB"
+        accent: "#FF7A00",
+        pink: "#FF3A7A"
       },
       boxShadow: {
-        soft: "0 10px 35px rgba(59, 2, 112, .10)",
-        glow: "0 12px 45px rgba(111, 0, 255, .18)"
+        soft: "0 10px 35px rgba(91, 31, 163, .12)",
+        glow: "0 12px 45px rgba(91, 31, 163, .18)"
       },
       keyframes: {
         float: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-7px)" } },

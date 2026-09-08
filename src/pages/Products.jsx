@@ -23,13 +23,21 @@ export default function Products() {
     getProducts({q:params.get("q")||"", category:params.get("category")||"", minRating, sort}).then(setProducts).finally(()=>setLoading(false));
   }, [params, minRating, sort]);
 
-  const submit = e => { e.preventDefault(); const next = new URLSearchParams(params); q ? next.set("q",q) : next.delete("q"); category ? next.set("category",category) : next.delete("category"); setParams(next); };
+  const updateSearch = (value) => {
+    setQ(value);
+    const next = new URLSearchParams(params);
+    if (value.trim()) next.set("q", value.trim()); else next.delete("q");
+    if (category) next.set("category", category); else next.delete("category");
+    setParams(next);
+  };
+
+  const submit = e => { e.preventDefault(); updateSearch(q); };
   const clear = () => { setQ(""); setCategory(""); setMinRating(""); setSort(""); setParams({}); };
 
   return <div className="container-app py-7">
     <div className="mb-7"><p className="eyebrow">Catalogue</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">Tous les produits</h1><p className="mt-2 text-sm muted">Recherche, filtres et tri pour trouver rapidement ce qu'il vous faut.</p></div>
     <div className="mb-5 flex flex-col gap-3 lg:flex-row">
-      <form onSubmit={submit} className="flex-1"><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input value={q} onChange={e=>setQ(e.target.value)} className="input pl-11" placeholder="Rechercher..." /></div></form>
+      <form onSubmit={submit} className="flex-1"><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input value={q} onChange={e=>updateSearch(e.target.value)} className="input pl-11" placeholder="Rechercher..." /></div></form>
       <button className="btn-secondary lg:hidden" onClick={()=>setFiltersOpen(v=>!v)}><SlidersHorizontal size={18}/> Filtres</button>
       <div className={`${filtersOpen?"block":"hidden"} rounded-2xl border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-[#23003f] lg:flex lg:items-center lg:gap-3 lg:border-0 lg:bg-transparent lg:p-0 lg:dark:bg-transparent`}>
         <select className="input w-full lg:w-48" value={category} onChange={e=>{const v=e.target.value;setCategory(v);const next=new URLSearchParams(params);v?next.set("category",v):next.delete("category");setParams(next);}}><option value="">Toutes catégories</option>{categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select>

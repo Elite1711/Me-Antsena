@@ -23,8 +23,18 @@ export function OrdersProvider({ children }) {
   const updateOrderStatus = async (id, statusLabel) => {
     const target = orders.find(o => o.id === id);
     if (!target) return;
+    if (target.status === "Livrée") {
+      throw new Error("La commande livrée ne peut plus être modifiée.");
+    }
+
+    const previousStatus = target.status;
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: statusLabel } : o));
-    try { await adminUpdateOrderStatus(target.rawId ?? id.replace("CMD-", ""), statusLabel); } catch { /* rollback silencieux non critique */ }
+    try {
+      await adminUpdateOrderStatus(target.rawId ?? id.replace("CMD-", ""), statusLabel);
+    } catch (error) {
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status: previousStatus } : o));
+      throw error;
+    }
   };
 
   const userOrders = orders;

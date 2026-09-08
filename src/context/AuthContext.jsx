@@ -22,21 +22,77 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const applyUser = (nextUser) => {
+    if (nextUser) {
+      setUser(nextUser);
+      return nextUser;
+    }
+    setUser(null);
+    return null;
+  };
+
   const loadProfile = async (authUser) => {
-    if (!authUser) { setUser(null); return null; }
-    const { data, error } = await supabase.from('profiles').select('id,first_name,last_name,email,phone,role,status').eq('id', authUser.id).single();
-    if (error) { setUser(null); return null; }
-    if (data.status !== 'active') { await supabase.auth.signOut(); setUser(null); return null; }
-    const mapped = mapUser(data);
-    setUser(mapped);
-    return mapped;
+    if (!authUser) {
+      applyUser(null);
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase.from('profiles').select('id,first_name,last_name,email,phone,role,status').eq('id', authUser.id).single();
+      if (error) {
+        applyUser(null);
+        return null;
+      }
+
+      if (data.status !== 'active') {
+        await supabase.auth.signOut();
+        applyUser(null);
+        return null;
+      }
+
+      const mapped = mapUser(data);
+      applyUser(mapped);
+      return mapped;
+    } catch {
+      applyUser(null);
+      return null;
+    }
   };
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => { if (mounted) await loadProfile(data.session?.user ?? null); if (mounted) setLoading(false); });
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => { if (mounted) await loadProfile(session?.user ?? null); });
-    return () => { mounted = false; listener.subscription.unsubscribe(); };
+
+    const restoreSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        if (data.session?.user) {
+          await loadProfile(data.session.user);
+        } else {
+          applyUser(null);
+        }
+      } catch {
+        if (mounted) applyUser(null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    restoreSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        await loadProfile(session.user);
+      } else {
+        applyUser(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   const login = async ({ email, password }) => {
@@ -44,7 +100,9 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
       if (error) throw new Error(error.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect' : error.message);
-      return await loadProfile(data.user);
+      const userProfile = await loadProfile(data.user);
+      if (!userProfile) throw new Error('Session introuvable');
+      return userProfile;
     } finally { setLoading(false); }
   };
 
@@ -57,7 +115,9 @@ export function AuthProvider({ children }) {
       });
       if (error) throw new Error(error.message);
       if (!data.session) throw new Error('Compte créé. Vérifiez votre email pour confirmer votre compte avant de vous connecter.');
-      await loadProfile(data.user);
+      const userProfile = await loadProfile(data.user);
+      if (!userProfile) throw new Error('Impossible de restaurer la session');
+      return userProfile;
     } finally { setLoading(false); }
   };
 
@@ -65,10 +125,16 @@ export function AuthProvider({ children }) {
     const [firstName, ...rest] = (patch.name || user.name || '').trim().split(' ');
     const { data, error } = await supabase.from('profiles').update({ first_name: firstName || user.firstName, last_name: rest.join(' ') || user.lastName, phone: patch.phone ?? user.phone }).eq('id', user.id).select('id,first_name,last_name,email,phone,role,status').single();
     if (error) throw new Error(error.message);
-    const next = mapUser(data); setUser(next); return next;
+    const next = mapUser(data);
+    applyUser(next);
+    return next;
   };
 
-  const logout = async () => { await supabase.auth.signOut(); setUser(null); };
+  const logout = async () => {
+    try { await supabase.auth.signOut(); } catch {}
+    applyUser(null);
+  };
+
   const value = useMemo(() => ({ user, loading, login, register, updateProfile, logout, isAuthenticated: !!user, isAdmin: user?.role === 'admin' }), [user, loading]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

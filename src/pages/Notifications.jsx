@@ -1,6 +1,8 @@
 import { Bell, Check, Package, Sparkles, Tag } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useSettings } from "../context/SettingsContext";
+import { useTranslation } from "../hooks/useTranslation";
 
 const initial = [
   {id:1,icon:Sparkles,title:"Nouvelle recommandation",text:"Nous avons trouvé des produits qui pourraient vous plaire.",time:"Il y a 10 min"},
@@ -10,10 +12,17 @@ const initial = [
 
 export default function Notifications(){
   const {user}=useAuth();
+  const {settings}=useSettings();
+  const { t } = useTranslation();
   const key=useMemo(()=>`me_antsena_notifications_read_${user?.email||"guest"}`,[user?.email]);
   const [list,setList]=useState(()=>{
     try { return localStorage.getItem(key)==="1" ? [] : initial; } catch { return initial; }
   });
   const markAll=()=>{setList([]);try{localStorage.setItem(key,"1")}catch{}};
-  return <div className="container-app py-8"><div className="flex items-end justify-between gap-4"><div><p className="eyebrow">Centre d'activité</p><h1 className="mt-1 text-3xl font-black">Notifications</h1></div>{list.length>0&&<button type="button" onClick={markAll} className="btn-secondary"><Check size={16}/> Tout marquer comme lu</button>}</div><div className="card mt-7 divide-y divide-slate-100 dark:divide-white/10">{list.length?list.map(n=>{const I=n.icon;return <div key={n.id} className="flex gap-4 p-5"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-900/30"><I size={19}/></span><div><p className="font-black">{n.title}</p><p className="mt-1 text-sm muted">{n.text}</p><p className="mt-2 text-[11px] text-slate-400">{n.time}</p></div></div>}):<div className="p-12 text-center"><Bell className="mx-auto text-slate-300" size={34}/><p className="mt-3 font-bold">Vous êtes à jour</p><p className="mt-1 text-sm muted">Aucune nouvelle notification.</p></div>}</div></div>
+
+  if (!settings.notifications) {
+    return <div className="container-app py-8"><div className="card p-8 text-center"><Bell className="mx-auto text-slate-300" size={36}/><h1 className="mt-4 text-3xl font-black">{t("general.notificationsDisabled")}</h1><p className="mt-2 text-sm muted">Vous avez désactivé les alertes. Activez-les dans les paramètres pour recevoir les mises à jour.</p></div></div>;
+  }
+
+  return <div className="container-app py-8"><div className="flex items-end justify-between gap-4"><div><p className="eyebrow">Centre d'activité</p><h1 className="mt-1 text-3xl font-black">{t("nav.notifications")}</h1></div>{list.length>0&&<button type="button" onClick={markAll} className="btn-secondary"><Check size={16}/> {t("general.allRead")}</button>}</div><div className="card mt-7 divide-y divide-slate-100 dark:divide-white/10">{list.length?list.map(n=>{const I=n.icon;return <div key={n.id} className="flex gap-4 p-5"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-900/30"><I size={19}/></span><div><p className="font-black">{n.title}</p><p className="mt-1 text-sm muted">{n.text}</p><p className="mt-2 text-[11px] text-slate-400">{n.time}</p></div></div>}):<div className="p-12 text-center"><Bell className="mx-auto text-slate-300" size={34}/><p className="mt-3 font-bold">{t("general.upToDate")}</p><p className="mt-1 text-sm muted">{t("general.noNewNotifications")}</p></div>}</div></div>
 }
