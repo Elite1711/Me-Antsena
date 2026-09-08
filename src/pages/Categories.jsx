@@ -1,0 +1,5 @@
+import { ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { getCategories } from "../api/service";
+export default function Categories(){const [cats,setCats]=useState([]);useEffect(()=>{getCategories().then(setCats)},[]);return <div className="container-app py-8"><p className="eyebrow">Explorer</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">Catégories</h1><p className="mt-2 text-sm muted">Trouvez rapidement les produits qui vous intéressent.</p><div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{cats.map(c=><Link key={c.name} to={`/products?category=${encodeURIComponent(c.name)}`} className="card group p-6 transition hover:-translate-y-1 hover:shadow-glow"><div className="text-4xl">{c.icon}</div><div className="mt-5 flex items-center justify-between"><div><h2 className="font-extrabold">{c.name}</h2><p className="mt-1 text-xs muted">{c.count} produits</p></div><ArrowRight size={17} className="text-brand-500 transition group-hover:translate-x-1"/></div></Link>)}</div></div>}
