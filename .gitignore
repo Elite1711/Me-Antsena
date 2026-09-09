@@ -7,3 +7,11 @@ dist
 **/.venv/
 **/venv/
 ML/.venv/
+
+__pycache__/
+
+*.pyc
+
+*/__pycache__/
+
+**/__pycache__/
