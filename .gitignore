@@ -3,3 +3,7 @@ dist
 .env
 .env.local
 .DS_Store
+# nested virtualenvs
+**/.venv/
+**/venv/
+ML/.venv/

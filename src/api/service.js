@@ -23,7 +23,7 @@ const mapOrder=o=>({id:`CMD-${o.id}`,rawId:o.id,status:STATUS_LABELS[o.status]||
 export async function getMyOrders(){ const {data,error}=await supabase.from('orders').select('id,total,status,created_at,profile:profiles(first_name,last_name,email),order_items(product_id,product_name,unit_price,quantity)').order('created_at',{ascending:false}); if(error) throw new Error(error.message); return data.map(mapOrder); }
 export const mapStatusLabel=s=>STATUS_LABELS[s]||s; export const mapStatusValue=s=>STATUS_VALUES[s]||'pending';
 export async function createOrder({items,address,paymentMethod,deliveryMethod}){ let addressId=null; if(address?.trim()){const {data,error}=await supabase.from('addresses').insert({label:'Livraison',street:address.trim()}).select('id').single();if(error)throw new Error(error.message);addressId=data.id;} const {data,error}=await supabase.rpc('create_order',{p_items:items.map(i=>({product_id:i.id,quantity:i.quantity})),p_address_id:addressId,p_payment_method:paymentMethod||null,p_delivery_method:deliveryMethod||null}); if(error)throw new Error(error.message); return {id:`CMD-${data.id}`,rawId:data.id}; }
-export async function getDashboardStats(){
+export async function getDashboardStats(opts = {}){
   // Fetch orders with order items so we can compute reliable sales figures
   const [u,o,p,i]=await Promise.all([
     supabase.from('profiles').select('id',{count:'exact',head:true}).eq('role','user'),
@@ -58,18 +58,21 @@ export async function getDashboardStats(){
   const views = interactions.filter(x => x.type === 'view').length;
   const carts = interactions.filter(x => x.type === 'add_to_cart').length;
 
-  // Monthly sales for the last 12 months (relative to now). Use month index with year to separate years.
+  // Daily sales for the last N days (relative to now). Default: 30 days.
   const now = new Date();
-  const months = Array.from({ length: 12 }).map((_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-    return { year: d.getFullYear(), month: d.getMonth() };
+  const DAYS = Number(opts.days) || 30;
+  const days = Array.from({ length: DAYS }).map((_, i) => {
+    // create a date for each day in the window (preserve local date)
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (DAYS - 1 - i));
+    return d;
   });
-  const chart = months.map(({ year, month }) => {
+
+  const chart = days.map(daily => {
     let sum = 0;
     orders.forEach((ord, idx) => {
       const dt = ord.created_at ? new Date(ord.created_at) : null;
       if (!dt) return;
-      if (dt.getFullYear() === year && dt.getMonth() === month && isDelivered(ord.status)) {
+      if (dt.getFullYear() === daily.getFullYear() && dt.getMonth() === daily.getMonth() && dt.getDate() === daily.getDate() && isDelivered(ord.status)) {
         sum += (orderSales[idx] || 0);
       }
     });

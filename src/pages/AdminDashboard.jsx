@@ -17,6 +17,7 @@ export default function AdminDashboard(){
   const [data,setData]=useState(null);
   const [products,setProducts]=useState([]);
   const [categories,setCategories]=useState([]);
+  const [days,setDays]=useState(30);
   const { orders, updateOrderStatus } = useOrders();
   const [users,setUsers]=useState([]);
   const [query,setQuery]=useState("");
@@ -25,12 +26,12 @@ export default function AdminDashboard(){
   const goTab = (id) => { setTab(id); navigate(id === "dashboard" ? "/admin" : `/admin/${id === "products" ? "produits" : id === "orders" ? "commandes" : "utilisateurs"}`); };
   const refreshDashboard = useCallback(async () => {
     try {
-      const stats = await getDashboardStats();
+      const stats = await getDashboardStats({ days });
       setData(stats);
     } catch {
       toast.error("Impossible de charger les statistiques");
     }
-  }, []);
+  }, [days]);
 
   useEffect(()=>{setTab(initialTab);},[initialTab]);
   useEffect(()=>{
@@ -69,7 +70,7 @@ export default function AdminDashboard(){
   return <>
     <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div><p className="eyebrow">Administration</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">Tableau de bord</h1><p className="mt-2 text-sm muted">Gérez les produits, utilisateurs, commandes et recommandations depuis un seul espace.</p></div><div className="flex flex-wrap gap-2"><button onClick={()=>setModal({type:"product"})} className="btn-primary"><Plus size={17}/> Ajouter un produit</button></div></div>
     <div className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-black/5 bg-white p-2 dark:border-white/10 dark:bg-[#3B0270]">{[["dashboard","Tableau de bord",BarChart3],["products","Produits",Package],["orders","Commandes",ShoppingCart],["users","Utilisateurs",Users]].map(([id,label,Icon])=><button key={id} onClick={()=>goTab(id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold ${tab===id?"bg-brand-500 text-white":"text-slate-500 hover:bg-brand-50 dark:text-slate-300 dark:hover:bg-white/5"}`}><Icon size={16}/>{label}</button>)}</div>
-    {tab==="dashboard" && <Dashboard data={data} products={products} goTab={goTab}/>} 
+    {tab==="dashboard" && <Dashboard data={data} products={products} goTab={goTab} days={days} setDays={setDays}/>} 
     {tab==="products" && <Products products={filteredProducts} query={query} setQuery={setQuery} onSubmit={submitSearch} onDelete={deleteProduct} onEdit={p=>setModal({type:"product",product:p})} onAdd={()=>setModal({type:"product"})}/>} 
     {tab==="orders" && <Orders orders={orders} onChange={changeOrder}/>} 
     {tab==="users" && <UsersPanel users={users} onToggle={toggleUser}/>} 
@@ -84,7 +85,18 @@ export default function AdminDashboard(){
   </>;
 }
 
-function Dashboard({data,products,goTab}){return <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={TrendingUp} label="Ventes totales" value={formatPrice(data.sales)} trend="+6,2%"/><Stat icon={Users} label="Utilisateurs" value={data.users.toLocaleString("fr-FR")} trend="+8,1%"/><Stat icon={ShoppingCart} label="Commandes" value={data.orders} trend="+5,7%"/><Stat icon={Sparkles} label="Conversion" value={`${data.conversion}%`} trend="+1,4%"/></div><div className="mt-6 grid gap-6 xl:grid-cols-[1.5fr_1fr]"><div className="card p-6"><div className="flex items-center justify-between"><div><h2 className="font-black">Ventes des 12 dernières périodes</h2><p className="text-xs muted">Suivi global des ventes</p></div><BarChart3 className="text-brand-500"/></div><div className="mt-7"><div className="w-full overflow-x-auto">
+function Dashboard({data,products,goTab,days,setDays}){return <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={TrendingUp} label="Ventes totales" value={formatPrice(data.sales)} trend="+6,2%"/><Stat icon={Users} label="Utilisateurs" value={data.users.toLocaleString("fr-FR")} trend="+8,1%"/><Stat icon={ShoppingCart} label="Commandes" value={data.orders} trend="+5,7%"/><Stat icon={Sparkles} label="Conversion" value={`${data.conversion}%`} trend="+1,4%"/></div><div className="mt-6 grid gap-6 xl:grid-cols-[1.5fr_1fr]"><div className="card p-6"><div className="flex items-center justify-between"><div><h2 className="font-black">Ventes des {data.chart.length} derniers jours</h2><p className="text-xs muted">Suivi global des ventes</p></div><BarChart3 className="text-brand-500"/></div><div className="mt-7"><div className="flex items-center justify-between">
+          <div className="text-sm muted">Période&nbsp;:</div>
+          <div className="flex items-center gap-2">
+            <select value={days} onChange={e=>setDays(Number(e.target.value))} className="rounded-md border p-1 text-sm">
+              <option value={7}>7 jours</option>
+              <option value={14}>14 jours</option>
+              <option value={30}>30 jours</option>
+              <option value={90}>90 jours</option>
+            </select>
+          </div>
+        </div>
+        <div className="w-full overflow-x-auto">
         {/* SVG bar chart for clearer visualization */}
         <svg viewBox="0 0 1200 240" className="w-full h-auto">
           {(() => {
@@ -104,8 +116,8 @@ function Dashboard({data,products,goTab}){return <><div className="grid gap-4 sm
                   const w = barWidth * 0.8;
                   const h = (v / max) * chartH;
                   const y = (paddingBottom + (chartH - h));
-                  const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-                  const label = d.toLocaleString('fr-FR', { month: 'short', year: '2-digit' }).replace('.', '');
+                  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (data.chart.length - 1 - i));
+                  const label = d.toLocaleString('fr-FR', { day: '2-digit', month: 'short' }).replace('.', '');
                   return (
                     <g key={i}>
                       <rect x={x} y={y} width={w} height={h} rx={6} fill="url(#grad)" />
