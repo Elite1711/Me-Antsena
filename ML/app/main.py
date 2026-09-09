@@ -357,15 +357,50 @@ def demo() -> Dict[str, Any]:
     return _build_choices("u-1", products_df, interactions_df, limit=6)
 
 
+def _apk(actual: list[str], predicted: list[str], k: int) -> float:
+    if not predicted:
+        return 0.0
+    pred_k = predicted[:k]
+    score = 0.0
+    num_hits = 0.0
+    for i, p in enumerate(pred_k):
+        if p in actual and p not in pred_k[:i]:
+            num_hits += 1.0
+            score += num_hits / (i + 1.0)
+    return score / min(len(actual), k) if actual else 0.0
+
+
+def _mapk(actual_list: list[list[str]], predicted_list: list[list[str]], k: int) -> float:
+    if not actual_list:
+        return 0.0
+    return float(np.mean([_apk(a, p, k) for a, p in zip(actual_list, predicted_list)]))
+
+
+def _ndcg_k(actual: list[str], predicted: list[str], k: int) -> float:
+    def _dcg(rel_list):
+        return sum((2 ** r - 1) / np.log2(i + 2) for i, r in enumerate(rel_list))
+
+    pred_k = predicted[:k]
+    rel = [1 if p in actual else 0 for p in pred_k]
+    dcg = _dcg(rel)
+    ideal_rel = sorted([1 if p in actual else 0 for p in actual], reverse=True)[:k]
+    idcg = _dcg(ideal_rel)
+    return float(dcg / idcg) if idcg > 0 else 0.0
+
+
 def _evaluate_leave_one_out(interactions_df: pd.DataFrame, products_df: pd.DataFrame, k_values=(1,3,5,10)) -> Dict[str, Any]:
-    """Compute Precision@K and Recall@K using a simple leave-one-out strategy.
+    """Compute Precision@K, Recall@K, MAP@K and NDCG@K using a simple leave-one-out strategy.
     We treat interactions of type 'purchase' as ground-truth positives; if none exist for a user we skip that user.
     """
     if interactions_df.empty:
         return {"error": "no interactions"}
 
-    results = {f"P@{k}": [] for k in k_values}
-    results.update({f"R@{k}": [] for k in k_values})
+    metrics = {f"P@{k}": [] for k in k_values}
+    metrics.update({f"R@{k}": [] for k in k_values})
+    # For MAP/NDCG we collect actual/predicted lists per user
+    actuals_per_k = {k: [] for k in k_values}
+    predicted_per_k = {k: [] for k in k_values}
+
     users = interactions_df["user_id"].astype(str).unique()
 
     for user in users:
@@ -373,9 +408,6 @@ def _evaluate_leave_one_out(interactions_df: pd.DataFrame, products_df: pd.DataF
         # consider only purchases as ground truth
         purchases = user_hist[user_hist["type"] == "purchase"]["product_id"].astype(str).unique()
         if len(purchases) == 0:
-            continue
-        # if user has only one purchase, proceed with leave-one-out if they have other interactions
-        if len(purchases) < 1:
             continue
         # choose a holdout purchase (last one by created_at if available)
         holdout = purchases[-1]
@@ -387,21 +419,25 @@ def _evaluate_leave_one_out(interactions_df: pd.DataFrame, products_df: pd.DataF
             recs = _build_choices(user, products_df, train_interactions, limit=max(k_values))
         except Exception:
             continue
-        # flatten recommended ids from hybrid (use hybrid for evaluation)
         rec_ids = [str(p["id"]) for p in recs.get("hybrid", [])]
         for k in k_values:
             topk = rec_ids[:k]
             hit = 1 if str(holdout) in topk else 0
-            results[f"P@{k}"].append(hit)
-            # recall is hit divided by number of relevant items (we use 1 since we held out one)
-            results[f"R@{k}"].append(hit)
+            metrics[f"P@{k}"].append(hit)
+            metrics[f"R@{k}"].append(hit)
+            actuals_per_k[k].append([str(holdout)])
+            predicted_per_k[k].append(topk)
 
     summary = {}
     for k in k_values:
-        p_list = results[f"P@{k}"]
-        r_list = results[f"R@{k}"]
+        p_list = metrics[f"P@{k}"]
+        r_list = metrics[f"R@{k}"]
         summary[f"P@{k}"] = float(np.mean(p_list)) if p_list else None
         summary[f"R@{k}"] = float(np.mean(r_list)) if r_list else None
+        summary[f"MAP@{k}"] = float(_mapk(actuals_per_k[k], predicted_per_k[k], k)) if actuals_per_k[k] else None
+        # compute average NDCG
+        ndcg_vals = [_ndcg_k(a, p, k) for a, p in zip(actuals_per_k[k], predicted_per_k[k])] if actuals_per_k[k] else []
+        summary[f"NDCG@{k}"] = float(np.mean(ndcg_vals)) if ndcg_vals else None
         summary[f"n_eval_users@{k}"] = len(p_list)
 
     return summary
