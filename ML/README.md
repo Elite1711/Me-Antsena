@@ -43,7 +43,19 @@ uvicorn ML.app.main:app --host 0.0.0.0 --port 8000 --reload
 - `GET /recommendations/{user_id}?limit=6` : recommandations complètes
 - `GET /recommendations?user_id=...&limit=6` : variante query-string
 - `GET /demo` : résultats de démonstration sans dépendance base de données
-- `GET /eval?limit=5` : exécute une évaluation offline (leave-one-out) et renvoie Precision@K / Recall@K pour k in [1,3,5,limit]
+- `GET /eval?limit=5` : exécute une évaluation offline (leave-one-out) et renvoie Precision@K / Recall@K / MAP@K / NDCG@K pour k in [1,3,5,limit]
+
+## Conteneurisation
+
+Un Dockerfile est fourni pour exécuter le service localement dans un conteneur :
+
+```bash
+cd /home/elite/meantsena
+docker build -t me-antsena-ml -f ML/Dockerfile .
+docker run -p 8000:8000 --env-file .env.local me-antsena-ml
+```
+
+Note : fournissez vos variables Supabase dans `.env.local` si vous souhaitez que le service interroge la base Supabase réelle ; sinon le service utilisera le jeu de données de démonstration fourni.
 
 ## Exemple de réponse
 
