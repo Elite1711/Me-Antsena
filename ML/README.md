@@ -1,70 +1,73 @@
-# Me-Antsena — moteur de recommandations ML
+# Me-Antsena — Moteur de recommandation ML
 
-Ce dossier contient le moteur de recommandations utilisé pour le projet e-commerce Me-Antsena.
-
-## Ce qui est inclus
-
-- Content-based filtering : recommandations basées sur les caractéristiques du produit (nom, description, catégorie, tags, marque)
-- Collaborative filtering : recommandations basées sur les interactions utilisateurs similaires
-- Popularity-based : produits les plus populaires / les mieux notés
-- Hybrid recommender : combinaison des approches pour un meilleur cold-start et meilleure précision
-- Validation / tests : script de vérification d'authentification Supabase + génération de recommandations
-
-## Prérequis
-
-Python 3.10+
+Ce dossier contient le moteur de recommandation conforme au cahier des charges :
+- filtrage collaboratif
+- filtrage basé sur le contenu
+- approche hybride
+- gestion du cold-start
+- API FastAPI pour exposition des recommandations
 
 ## Installation
 
 ```bash
 cd /home/elite/meantsena
 python3 -m venv .venv
-source .venv/bin/activate
+. .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r ML/requirements.txt
 ```
 
-Si le projet est déjà configuré avec un fichier `.env.local`, le script chargera automatiquement les variables de connexion Supabase.
+## Variables d'environnement
 
-## Variables d'environnement du projet
-
-Dans le dossier racine du projet (`/home/elite/meantsena/.env.local`), ajouter :
+Créer un fichier `.env.local` à la racine du projet si nécessaire :
 
 ```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_URL=https://<votre-projet>.supabase.co
+SUPABASE_ANON_KEY=<cle-anon>
+# ou, si vous utilisez la configuration frontend existante :
+VITE_SUPABASE_URL=https://<votre-projet>.supabase.co
+VITE_SUPABASE_ANON_KEY=<cle-anon>
 ```
 
-Le module Python essaie aussi de lire `SUPABASE_URL` et `SUPABASE_ANON_KEY` si ces variables existent.
-
-## Utilisation
-
-### Vérifier l'auth + le moteur ML
+## Lancer le service
 
 ```bash
 cd /home/elite/meantsena
-source .venv/bin/activate
-python ML/test_login_and_ml.py
+. .venv/bin/activate
+uvicorn ML.app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Lancer l'algorithme de recommandation
+## Endpoints
 
-```bash
-cd /home/elite/meantsena
-source .venv/bin/activate
-python ML/main.py --user-id USER_ID --top-n 5
+- `GET /health` : vérifie que le service répond
+- `GET /recommendations/{user_id}?limit=6` : recommandations complètes
+- `GET /recommendations?user_id=...&limit=6` : variante query-string
+- `GET /demo` : résultats de démonstration sans dépendance base de données
+- `GET /eval?limit=5` : exécute une évaluation offline (leave-one-out) et renvoie Precision@K / Recall@K pour k in [1,3,5,limit]
+
+## Exemple de réponse
+
+```json
+{
+  "user_id": "u-1",
+  "cold_start": false,
+  "generated_at": "2026-09-10T00:00:00Z",
+  "collaborative": [
+    {"id": 3, "name": "Montre connectée Fit 3", "reason": "Les utilisateurs similaires ont aimé la sélection 3"}
+  ],
+  "content": [
+    {"id": 2, "name": "Sac à dos tendance", "reason": "Recommandé car vous avez consulté 1"}
+  ],
+  "hybrid": [
+    {"id": 3, "name": "Montre connectée Fit 3", "reason": "Score hybride optimisé entre contenu et similarité"}
+  ]
+}
 ```
 
-### Exécuter les fichiers Python du module
+## Métriques / validation
 
-```bash
-cd /home/elite/meantsena
-source .venv/bin/activate
-python -m ML.Src.main --user-id USER_ID --top-n 5
-```
-
-## Remarques
-
-- Les scripts sont adaptés au schéma du projet Me-Antsena : `products`, `orders`, `interactions`, `favorites`.
-- Si la base est vide ou si les variables Supabase ne sont pas configurées, la commande ne doit pas planter : elle renvoie un message explicite et s'arrête proprement.
-- Les modèles sont conçus pour fonctionner sur les produits et interactions réelles du projet, sans dépendre de jeux de données externes.
+Le système est conçu pour évaluer automatiquement :
+- précision / rappel / F1 pour les recommandations top-k
+- similarité produit par contenu
+- score hybride α × collaboratif + (1-α) × contenu
+- cold-start fallback vers tendances / popularité
