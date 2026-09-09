@@ -1,0 +1,13 @@
+import { ArrowRight, Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useCart } from "../context/CartContext";
+import { formatPrice } from "../utils/format";
+import EmptyState from "../components/EmptyState";
+
+export default function Cart() {
+  const {items,subtotal,shipping,total,updateQuantity,removeFromCart}=useCart();
+  if(!items.length) return <div className="container-app py-12"><EmptyState title="Votre panier est vide" text="Découvrez nos produits et ajoutez vos favoris."/><div className="mt-5 text-center"><Link to="/products" className="btn-primary">Découvrir les produits</Link></div></div>;
+  return <div className="container-app py-7"><p className="eyebrow">Votre sélection</p><h1 className="mt-1 text-3xl font-black">Panier ({items.length})</h1><div className="mt-7 grid gap-6 lg:grid-cols-[1fr_380px]"><div className="space-y-3">{items.map(item=><div key={item.id} className="card flex gap-4 p-4"><img src={item.image} alt="" className="h-24 w-24 rounded-2xl object-cover"/><div className="min-w-0 flex-1"><div className="flex justify-between gap-3"><div><h2 className="line-clamp-2 font-bold">{item.name}</h2><p className="mt-1 text-xs muted">{item.category}</p></div><button onClick={()=>removeFromCart(item.id)} className="text-slate-400 hover:text-red-500" aria-label="Supprimer"><Trash2 size={18}/></button></div><div className="mt-5 flex items-center justify-between"><div className="flex items-center rounded-xl border border-slate-200 dark:border-white/10"><button className="p-2" onClick={()=>updateQuantity(item.id,item.quantity-1)}><Minus size={14}/></button><span className="w-8 text-center text-xs font-bold">{item.quantity}</span><button className="p-2" onClick={()=>updateQuantity(item.id,item.quantity+1)}><Plus size={14}/></button></div><p className="font-extrabold text-brand-600">{formatPrice(item.price*item.quantity)}</p></div></div></div>)}</div>
+    <aside className="card h-fit p-5 lg:sticky lg:top-24"><h2 className="text-lg font-black">Résumé</h2><div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="muted">Sous-total</span><b>{formatPrice(subtotal)}</b></div><div className="flex justify-between"><span className="muted">Livraison</span><b>{shipping?formatPrice(shipping):"Gratuite"}</b></div><div className="my-3 border-t border-slate-100 dark:border-white/10"/><div className="flex justify-between text-base"><span className="font-bold">Total</span><b className="text-xl text-brand-600">{formatPrice(total)}</b></div></div><Link to="/checkout" className="btn-primary mt-6 w-full">Passer la commande <ArrowRight size={17}/></Link></aside>
+  </div></div>;
+}
