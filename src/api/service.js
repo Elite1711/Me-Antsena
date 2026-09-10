@@ -91,7 +91,13 @@ export async function getDashboardStats(opts = {}){
 }
 
 export async function adminGetProducts(){const {data,error}=await supabase.from('products').select(`${PRODUCT_SELECT},reviews(rating)`).order('created_at',{ascending:false});if(error)throw new Error(error.message);return data.map(p=>({...mapProduct(p),rating:p.reviews?.length?p.reviews.reduce((a,r)=>a+Number(r.rating),0)/p.reviews.length:0,reviews:p.reviews?.length||0,__existing:true}));}
-async function uploadProductImage(image){ if(!image||!image.startsWith('data:'))return image||null; const res=await fetch(image);const blob=await res.blob();const ext=blob.type.split('/')[1]||'jpg';const path=`${crypto.randomUUID()}.${ext}`;const {error}=await supabase.storage.from('product-images').upload(path,blob,{contentType:blob.type,upsert:false});if(error)throw new Error(error.message);const {data}=supabase.storage.from('product-images').getPublicUrl(path);return data.publicUrl; }
+async function uploadProductImage(image){ if(!image||!image.startsWith('data:'))return image||null; const res=await fetch(image);const blob=await res.blob();const ext=blob.type.split('/')[1]||'jpg';
+  // crypto.randomUUID may not be available in all environments (older Node/browser or RN). Provide a safe fallback.
+  const uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : `id-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
+  const path = `${uuid}.${ext}`;
+  const {error}=await supabase.storage.from('product-images').upload(path,blob,{contentType:blob.type,upsert:false});if(error)throw new Error(error.message);const {data}=supabase.storage.from('product-images').getPublicUrl(path);return data.publicUrl; }
 export async function adminSaveProduct(form){const cats=await getCategories();const cat=cats.find(c=>c.name===form.category);const image=await uploadProductImage(form.image);const payload={name:form.name.trim(),description:form.description||'',price:Number(form.price)||0,category_id:cat?.id||null,stock:Number(form.stock)||0,images:image?[image]:[],tags:Array.isArray(form.tags)?form.tags:[]};let result;if(form.id&&form.__existing)result=await supabase.from('products').update(payload).eq('id',form.id).select(`${PRODUCT_SELECT}`).single();else result=await supabase.from('products').insert(payload).select(`${PRODUCT_SELECT}`).single();if(result.error)throw new Error(result.error.message);return mapProduct(result.data);}
 export const adminDeleteProduct=id=>supabase.from('products').delete().eq('id',id).then(ensureOk);
 export async function adminGetUsers(){const {data,error}=await supabase.from('profiles').select('id,first_name,last_name,email,phone,role,status,created_at').order('created_at',{ascending:false});if(error)throw new Error(error.message);return data.map(u=>({id:u.id,name:`${u.first_name} ${u.last_name}`.trim(),email:u.email,status:u.status==='active'?'Actif':'Suspendu',role:u.role,createdAt:u.created_at}));}
