@@ -12,7 +12,48 @@ async function ensureOk({data,error}) { if(error) throw new Error(error.message)
 export async function getCategories(){ const {data,error}=await supabase.from('categories').select('id,name,icon,products(count)').order('id'); if(error) throw new Error(error.message); return data.map(c=>({id:c.id,name:c.name,icon:c.icon||CATEGORY_ICONS[c.name]||'🏷️',count:c.products?.[0]?.count||0})); }
 export async function getProducts(params={}) { let q=supabase.from('products').select(`${PRODUCT_SELECT},reviews(rating)`).gt('stock',0); if(params.q) q=q.or(`name.ilike.%${params.q}%,description.ilike.%${params.q}%`); if(params.minPrice) q=q.gte('price',Number(params.minPrice)); if(params.maxPrice) q=q.lte('price',Number(params.maxPrice)); if(params.category){const cats=await getCategories();const c=cats.find(x=>x.name===params.category);if(c)q=q.eq('category_id',c.id);} const sort={priceAsc:['price',true],priceDesc:['price',false],newest:['created_at',false],rating:['created_at',false]}[params.sort]||['created_at',false]; q=q.order(sort[0],{ascending:sort[1]}).limit(60); const {data,error}=await q; if(error) throw new Error(error.message); return (data||[]).map(p=>({...mapProduct(p),rating:p.reviews?.length?p.reviews.reduce((a,r)=>a+Number(r.rating),0)/p.reviews.length:0,reviews:p.reviews?.length||0})); }
 export async function getProduct(id){ const {data,error}=await supabase.from('products').select(`${PRODUCT_SELECT},reviews(rating)`).eq('id',id).single(); if(error) return null; return {...mapProduct(data),rating:data.reviews?.length?data.reviews.reduce((a,r)=>a+Number(r.rating),0)/data.reviews.length:0,reviews:data.reviews?.length||0}; }
-export async function getRecommendations(){ try { const products=await getProducts({sort:'rating'}); return {collaborative:products.slice(0,3),content:products.slice(3,6),hybrid:products.slice(0,4)}; } catch { return {collaborative:[],content:[],hybrid:[]}; } }
+export async function getRecommendations(){
+  try {
+    const { data, error } = await supabase
+      .from('recommendations')
+      .select('type,score,product:products(id,name,description,price,stock,category_id,images,tags,created_at,category:categories(id,name,icon),reviews(rating))')
+      .order('score', { ascending: false });
+
+    if (error) throw error;
+
+    const grouped = { collaborative: [], content: [], hybrid: [] };
+    const seen = new Set();
+
+    for (const row of data || []) {
+      const product = row?.product;
+      if (!product || !row?.type || !product.id) continue;
+      const key = `${row.type}:${product.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const mapped = {
+        ...mapProduct(product),
+        rating: product.reviews?.length ? product.reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / product.reviews.length : 0,
+        reviews: product.reviews?.length || 0,
+      };
+
+      grouped[row.type]?.push(mapped);
+    }
+
+    return {
+      collaborative: grouped.collaborative.slice(0, 6),
+      content: grouped.content.slice(0, 6),
+      hybrid: grouped.hybrid.slice(0, 6),
+    };
+  } catch {
+    const products = await getProducts({ sort: 'rating' });
+    return {
+      collaborative: products.slice(0, 3),
+      content: products.slice(3, 6),
+      hybrid: products.slice(0, 4),
+    };
+  }
+}
 export async function logInteraction(productId,type,value){ const {data:{user}}=await supabase.auth.getUser(); if(!user)return; await supabase.from('interactions').insert({user_id:user.id,product_id:productId,type,value:value==null?null:Number(value)}); }
 export async function getFavorites(){ const {data,error}=await supabase.from('favorites').select(`product:products(${PRODUCT_SELECT},reviews(rating))`).order('created_at',{ascending:false}); if(error) throw new Error(error.message); return data.map(x=>mapProduct(x.product)); }
 export const addFavorite=productId=>supabase.from('favorites').insert({product_id:productId}).then(ensureOk);

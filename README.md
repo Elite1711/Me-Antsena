@@ -27,6 +27,17 @@ Créez d'abord un compte sur `/register`, puis exécutez :
 update public.profiles set role = 'admin' where email = 'elitelalaina@gmail.com';
 ```
 
+### Machine learning
+
+Le dossier `ml/` contient un pipeline de recommandation basé sur un modèle TF-IDF (content-based) et un filtrage collaboratif. Pour le lancer en local, utilisez une clé backend `service_role` dans une variable d'environnement shell, pas dans le frontend :
+
+```bash
+cd /home/elite/meantsena
+export SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
+export SUPABASE_KEY="SERVICE_ROLE_KEY"
+./ml/run_sync_train.sh
+```
+
 ### Sécurité
 
 - La clé `service_role` n'est jamais utilisée dans le navigateur.

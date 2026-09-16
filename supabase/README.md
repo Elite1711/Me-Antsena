@@ -20,3 +20,9 @@ where email = 'votre-email@example.com';
 Le trigger `handle_new_user` crée automatiquement une ligne `profiles` pour chaque nouveau compte Auth : l'admin voit donc tous les utilisateurs dans **Administration > Utilisateurs**.
 
 Le bucket public `product-images` est créé par `schema.sql`. Seuls les administrateurs authentifiés peuvent envoyer, modifier ou supprimer les images.
+
+//auto-test
+cd /home/elite/meantsena
+export SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
+export SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzZHhnZ3BtcGVldGtwa21qeWh2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODg1MzQ4MCwiZXhwIjoyMTA0NDI5NDgwfQ.vWyEjPkKYY8X2-ddpl9jblU6wDY2x6HHTFKNJtza1uc"
+./ml/run_sync_train.sh
