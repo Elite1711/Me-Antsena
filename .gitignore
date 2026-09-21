@@ -1,0 +1,23 @@
+node_modules
+dist
+.env
+.env.local
+.env.ml
+.env.ml.local
+.DS_Store
+# nested virtualenvs
+**/.venv/
+**/venv/
+ML/.venv/
+
+__pycache__/
+
+*.pyc
+
+*/__pycache__/
+
+**/__pycache__/
+
+# artefacts ml-service générés par /train et /evaluate (pas du code source)
+ml-service/artifacts/*.pkl
+ml-service/artifacts/evaluation_history.json
