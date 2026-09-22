@@ -18,10 +18,11 @@ class CollaborativeFilteringModel:
     ce que le modèle collaboratif sait vraiment prédire).
     """
 
-    def __init__(self, embedding_dim: int = 32, learning_rate: float = 0.02, regularization: float = 0.01):
+    def __init__(self, embedding_dim: int = 16, learning_rate: float = 0.02, regularization: float = 0.01):
         self.embedding_dim = embedding_dim
         self.learning_rate = learning_rate
         self.regularization = regularization
+        self.effective_dim: int | None = None
         self.user_embeddings = None
         self.item_embeddings = None
         self.user_ids: list[int] = []
@@ -52,6 +53,26 @@ class CollaborativeFilteringModel:
         self.item_index = {item_id: idx for idx, item_id in enumerate(self.item_ids)}
         self.interaction_matrix = interaction_matrix
 
+        # La dimension des embeddings ne doit pas dépasser ce que les données
+        # peuvent réellement contraindre : avec peu d'utilisateurs/produits ou
+        # peu d'interactions non-nulles, un embedding_dim fixe et trop grand
+        # (ex. 32 sur un catalogue de 100 produits et quelques interactions par
+        # utilisateur) laisse le modèle sous-déterminé — il "invente" des
+        # valeurs plutôt que d'apprendre un vrai signal. On plafonne donc la
+        # dimension effective par min(embedding_dim, n_users-1, n_items-1, et
+        # le nombre moyen d'interactions connues par utilisateur).
+        n_known = int(np.count_nonzero(interaction_matrix))
+        avg_interactions_per_user = max(1, n_known // max(1, n_users))
+        self.effective_dim = max(
+            2,
+            min(
+                self.embedding_dim,
+                n_users - 1 if n_users > 1 else self.embedding_dim,
+                n_items - 1 if n_items > 1 else self.embedding_dim,
+                avg_interactions_per_user * 2,
+            ),
+        )
+
         # Popularité par produit = somme des poids d'interaction sur l'ensemble
         # des utilisateurs du train set. Sert de repli cold-start auto-suffisant :
         # le modèle n'a besoin d'aucune donnée externe pour dégrader proprement.
@@ -59,8 +80,8 @@ class CollaborativeFilteringModel:
         popularity_order = np.argsort(popularity_scores)[::-1]
         self.item_popularity_rank = [self.item_ids[idx] for idx in popularity_order]
 
-        self.user_embeddings = np.random.normal(0, 0.1, (n_users, self.embedding_dim))
-        self.item_embeddings = np.random.normal(0, 0.1, (n_items, self.embedding_dim))
+        self.user_embeddings = np.random.normal(0, 0.1, (n_users, self.effective_dim))
+        self.item_embeddings = np.random.normal(0, 0.1, (n_items, self.effective_dim))
 
         user_indices, item_indices = np.nonzero(interaction_matrix)
         for _ in range(epochs):
