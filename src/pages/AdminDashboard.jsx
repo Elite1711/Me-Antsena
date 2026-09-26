@@ -69,7 +69,7 @@ export default function AdminDashboard(){
   const toggleUser=async id=>{const target=users.find(u=>u.id===id);if(!target)return;const nextStatus=target.status==="Actif"?"Suspendu":"Actif";try{await adminSetUserStatus(id,nextStatus);setUsers(v=>v.map(u=>u.id===id?{...u,status:nextStatus}:u));toast.success("Statut utilisateur mis à jour")}catch(err){toast.error(err.message)}};
   return <>
     <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div><p className="eyebrow">Administration</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">Tableau de bord</h1><p className="mt-2 text-sm muted">Gérez les produits, utilisateurs, commandes et recommandations depuis un seul espace.</p></div><div className="flex flex-wrap gap-2"><button onClick={()=>setModal({type:"product"})} className="btn-primary"><Plus size={17}/> Ajouter un produit</button></div></div>
-    <div className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-black/5 bg-white p-2 dark:border-white/10 dark:bg-[#3B0270]">{[["dashboard","Tableau de bord",BarChart3],["products","Produits",Package],["orders","Commandes",ShoppingCart],["users","Utilisateurs",Users]].map(([id,label,Icon])=><button key={id} onClick={()=>goTab(id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold ${tab===id?"bg-brand-500 text-white":"text-slate-500 hover:bg-brand-50 dark:text-slate-300 dark:hover:bg-white/5"}`}><Icon size={16}/>{label}</button>)}</div>
+    <div className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-black/5 bg-white p-2 dark:border-white/10 dark:bg-[#2A1D12]">{[["dashboard","Tableau de bord",BarChart3],["products","Produits",Package],["orders","Commandes",ShoppingCart],["users","Utilisateurs",Users]].map(([id,label,Icon])=><button key={id} onClick={()=>goTab(id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold ${tab===id?"bg-brand-500 text-white":"text-slate-500 hover:bg-brand-50 dark:text-slate-300 dark:hover:bg-white/5"}`}><Icon size={16}/>{label}</button>)}</div>
     {tab==="dashboard" && <Dashboard data={data} products={products} goTab={goTab} days={days} setDays={setDays}/>} 
     {tab==="products" && <Products products={filteredProducts} query={query} setQuery={setQuery} onSubmit={submitSearch} onDelete={deleteProduct} onEdit={p=>setModal({type:"product",product:p})} onAdd={()=>setModal({type:"product"})}/>} 
     {tab==="orders" && <Orders orders={orders} onChange={changeOrder}/>} 
@@ -121,20 +121,20 @@ function Dashboard({data,products,goTab,days,setDays}){return <><div className="
                   return (
                     <g key={i}>
                       <rect x={x} y={y} width={w} height={h} rx={6} fill="url(#grad)" />
-                      <text x={x + w / 2} y={paddingBottom + chartH + 16} fontSize={12} fill="#94a3b8" textAnchor="middle">{label}</text>
-                      <text x={x + w / 2} y={y - 8} fontSize={12} fontWeight={700} fill="#0f172a" textAnchor="middle">{v > 0 ? formatPrice(v) : '-'}</text>
+                      <text x={x + w / 2} y={paddingBottom + chartH + 16} fontSize={12} fill="#9C8266" textAnchor="middle">{label}</text>
+                      <text x={x + w / 2} y={y - 8} fontSize={12} fontWeight={700} fill="#2A1B12" textAnchor="middle">{v > 0 ? formatPrice(v) : '-'}</text>
                     </g>
                   );
                 })}
                 {/* axes line */}
-                <line x1={paddingLeft} x2={1200 - paddingRight} y1={paddingBottom + chartH} y2={paddingBottom + chartH} stroke="#e6edf3" strokeWidth={1} />
+                <line x1={paddingLeft} x2={1200 - paddingRight} y1={paddingBottom + chartH} y2={paddingBottom + chartH} stroke="#E2CBAE" strokeWidth={1} />
               </g>
             );
           })()}
           <defs>
             <linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#7c3aed" />
-              <stop offset="100%" stopColor="#c084fc" />
+              <stop offset="0%" stopColor="#7A4B28" />
+              <stop offset="100%" stopColor="#C89B6C" />
             </linearGradient>
           </defs>
         </svg>
@@ -166,7 +166,7 @@ function ProductModal({product,categories,onClose,onSave}){
     onSave({...form,name:form.name.trim(),image:form.image||""});
   };
   return <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/40 p-4">
-    <div className="mx-auto my-6 w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#23003f]">
+    <div className="mx-auto my-6 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#241A10]">
       <div className="flex items-center justify-between">
         <div><p className="eyebrow">Catalogue</p><h2 className="mt-1 text-xl font-black">{product?"Modifier le produit":"Ajouter un produit"}</h2></div>
         <button onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5" aria-label="Fermer"><X/></button>

@@ -64,6 +64,7 @@ export const translations = {
     hybridMl: { Français: "Hybride ML", Malagasy: "ML hybrid", English: "Hybrid ML" },
     categories: { Français: "Catégories", Malagasy: "Sokajy", English: "Categories" },
     recommendedForYou: { Français: "Recommandé pour vous", Malagasy: "Nolazaina ho anao", English: "Recommended for you" },
+    forYouSubtitle: { Français: "Le meilleur du collaboratif et du contenu, réuni pour vous", Malagasy: "Ny tsara indrindra avy amin'ny vondrom-piarahamonina sy ny atiny, natambatra ho anao", English: "The best of collaborative and content filtering, combined for you" },
     basedOnCommunity: { Français: "Basé sur les habitudes de la communauté", Malagasy: "Miorina amin'ny fihetsika amin'ny vondrom-piarahamonina", English: "Based on community habits" },
     recentConsults: { Français: "Basé sur vos consultations récentes", Malagasy: "Miorina amin'ny fikarohana farany nataonao", English: "Based on your recent searches" },
     contentFiltering: { Français: "Filtrage basé sur le contenu", Malagasy: "Filterina mifototra amin'ny atiny", English: "Content-based filtering" },

@@ -29,7 +29,7 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-black/5 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-[#17002d]/90">
+    <header className="sticky top-0 z-50 border-b border-black/5 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-[#17110A]/90">
       <div className="container-app flex h-20 items-center gap-4">
         <button className="rounded-xl p-2 lg:hidden" onClick={() => setOpen(v=>!v)} aria-label="Ouvrir le menu">{open ? <X/> : <Menu/>}</button>
         <Logo compact />

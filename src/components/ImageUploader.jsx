@@ -37,12 +37,12 @@ export default function ImageUploader({ value, onChange }) {
       <span className="mb-2 block text-xs font-bold">Image du produit</span>
       {value ? (
         <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5">
-          <img src={value} alt="Aperçu du produit" className="h-48 w-full object-contain bg-white dark:bg-[#17002d]" />
+          <img src={value} alt="Aperçu du produit" className="h-48 w-full object-contain bg-white dark:bg-[#17110A]" />
           <div className="absolute right-3 top-3 flex gap-2">
-            <button type="button" onClick={() => inputRef.current?.click()} className="rounded-xl bg-white/95 px-3 py-2 text-xs font-bold text-brand-700 shadow dark:bg-[#23003f] dark:text-brand-200">
+            <button type="button" onClick={() => inputRef.current?.click()} className="rounded-xl bg-white/95 px-3 py-2 text-xs font-bold text-brand-700 shadow dark:bg-[#241A10] dark:text-brand-200">
               Remplacer
             </button>
-            <button type="button" onClick={() => onChange("")} className="grid h-9 w-9 place-items-center rounded-xl bg-white/95 text-red-500 shadow dark:bg-[#23003f]" aria-label="Supprimer l'image">
+            <button type="button" onClick={() => onChange("")} className="grid h-9 w-9 place-items-center rounded-xl bg-white/95 text-red-500 shadow dark:bg-[#241A10]" aria-label="Supprimer l'image">
               <X size={16} />
             </button>
           </div>

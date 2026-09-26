@@ -5,24 +5,26 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Café au lait (clair) → café noir (sombre) : une seule rampe brune,
+        // les surfaces de page/carte changent séparément via les classes dark:.
         brand: {
-          50: "#FDE8F8",
-          100: "#F7D0F1",
-          200: "#F0A8E7",
-          300: "#E27AF6",
-          400: "#B75DFF",
-          500: "#5B1FA3",
-          600: "#431B83",
-          700: "#2A0F52",
-          800: "#18072D",
-          900: "#0D0318"
+          50: "#FBF6EF",
+          100: "#F0E4D4",
+          200: "#E2CBAE",
+          300: "#C9A47A",
+          400: "#A9714A",
+          500: "#7A4B28",
+          600: "#5C3A21",
+          700: "#3E2A1C",
+          800: "#2A1B12",
+          900: "#1A110B"
         },
-        accent: "#FF7A00",
-        pink: "#FF3A7A"
+        accent: "#A9714A",
+        pink: "#C9A47A"
       },
       boxShadow: {
-        soft: "0 10px 35px rgba(91, 31, 163, .12)",
-        glow: "0 12px 45px rgba(91, 31, 163, .18)"
+        soft: "0 10px 35px rgba(90, 58, 33, .12)",
+        glow: "0 12px 45px rgba(90, 58, 33, .18)"
       },
       keyframes: {
         float: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-7px)" } },

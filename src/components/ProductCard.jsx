@@ -12,7 +12,7 @@ function ProductCard({ product, reason }) {
   const favorite = isFavorite(product.id);
   const add = (e) => { e.preventDefault(); addToCart(product); };
   const fav = (e) => { e.preventDefault(); toggleFavorite(product); };
-  return <article className="group relative overflow-hidden rounded-3xl border border-black/5 bg-white shadow-soft transition duration-300 hover:-translate-y-1 hover:shadow-glow dark:border-white/10 dark:bg-[#23003f]">
+  return <article className="group relative overflow-hidden rounded-2xl border border-black/5 bg-white shadow-soft transition duration-300 hover:-translate-y-1 hover:shadow-glow dark:border-white/10 dark:bg-[#241A10]">
     <div className="relative aspect-square overflow-hidden bg-brand-50 dark:bg-white/5">
       <Link to={`/products/${product.id}`} className="block h-full" aria-label={`Voir ${product.name}`}>
         <img src={product.image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
