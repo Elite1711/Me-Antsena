@@ -20,7 +20,13 @@ from data import build_interaction_matrix, fetch_interactions, fetch_products, g
 from models import CollaborativeFilteringModel
 
 # Poids reflétant l'intensité de chaque type d'interaction (identique à data.py).
-INTERACTION_WEIGHTS = {"view": 1.0, "favorite": 2.0, "add_to_cart": 2.5, "purchase": 5.0}
+INTERACTION_WEIGHTS = {
+    "view": 1.0,
+    "recommendation_click": 1.5,
+    "favorite": 2.0,
+    "add_to_cart": 2.5,
+    "purchase": 5.0,
+}
 
 # Une simple vue est trop faible pour juger la pertinence d'une recommandation :
 # seules les interactions à engagement fort comptent comme "pertinentes" pour Precision/Recall.

@@ -2,7 +2,7 @@ import { ArrowLeft, Heart, Minus, Plus, Share2, ShoppingCart, Sparkles } from "l
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { getProduct, getProductReviews, getProducts, getRecommendations, logInteraction, submitReview } from "../api/service";
+import { getProduct, getProductReviews, getProducts, getRecommendations, getSimilarProducts, logInteraction, submitReview } from "../api/service";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useFavorites } from "../context/FavoritesContext";
@@ -21,11 +21,13 @@ export default function ProductDetail() {
   useEffect(()=>{
     let active=true;
     setLoading(true); setProduct(null); setQty(1); setReviews([]); setReviewRating(0); setReviewComment("");
-    Promise.all([getProduct(id),getProducts(),getRecommendations(),getProductReviews(id)]).then(([p,all,r,rv])=>{
+    Promise.all([getProduct(id),getProducts(),getRecommendations(),getProductReviews(id)]).then(async ([p,all,r,rv])=>{
+      if(!active) return;
+      const similarProducts = p ? await getSimilarProducts(p.id, all) : [];
       if(!active) return;
       setProduct(p);
       if (p) logInteraction(p.id, "view");
-      setSimilar(p ? all.filter(x=>x.category===p.category&&String(x.id)!==String(p.id)).slice(0,4) : []);
+      setSimilar(similarProducts);
       setRecs(p ? r.collaborative.filter(x=>String(x.id)!==String(p.id)) : []);
       setReviews(rv);
       setLoading(false);
@@ -58,7 +60,7 @@ export default function ProductDetail() {
       <div className="card overflow-hidden"><img src={product.image} alt={product.name} className="aspect-square w-full object-cover"/></div>
       <div className="py-2"><span className="eyebrow">{product.category}</span><h1 className="mt-2 text-3xl font-black sm:text-4xl">{product.name}</h1><div className="mt-3 flex items-center gap-3"><StarRating value={product.rating} showValue/><span className="text-sm muted">{product.reviews} avis</span></div><div className="mt-6 flex items-end gap-3"><span className="text-3xl font-black text-brand-600 dark:text-brand-300">{formatPrice(product.price)}</span>{product.oldPrice>product.price&&<del className="text-sm text-slate-400">{formatPrice(product.oldPrice)}</del>}</div><p className="mt-5 leading-7 muted">{product.description}</p>
       <div className="mt-5 flex items-center gap-3"><span className={`rounded-full px-3 py-1 text-xs font-bold ${product.stock<15?"bg-orange-100 text-orange-700":"bg-emerald-100 text-emerald-700"}`}>{product.stock<15?`Plus que ${product.stock} en stock`:"En stock"}</span></div>
-      <div className="mt-7 flex flex-wrap items-center gap-3"><div className="flex items-center rounded-2xl border border-slate-200 dark:border-white/10"><button className="p-3" onClick={()=>setQty(Math.max(1,qty-1))} aria-label="Diminuer"><Minus size={16}/></button><span className="w-10 text-center text-sm font-bold">{qty}</span><button className="p-3" onClick={()=>setQty(Math.min(product.stock,qty+1))} aria-label="Augmenter"><Plus size={16}/></button></div><button className="btn-primary flex-1 sm:flex-none" onClick={()=>addToCart(product,qty)}><ShoppingCart size={18}/> Ajouter au panier</button><button className={`btn-secondary p-3 ${isFavorite(product.id)?"text-pink border-pink-200":""}`} onClick={()=>toggleFavorite(product)} aria-label={isFavorite(product.id)?"Retirer des favoris":"Ajouter aux favoris"}><Heart size={19} fill={isFavorite(product.id)?"currentColor":"none"}/></button><button className="btn-secondary p-3" onClick={async()=>{
+      <div className="mt-7 flex flex-wrap items-center gap-3"><div className="flex items-center rounded-2xl border border-slate-200 dark:border-white/10"><button className="p-3" onClick={()=>setQty(Math.max(1,qty-1))} aria-label="Diminuer"><Minus size={16}/></button><span className="w-10 text-center text-sm font-bold">{qty}</span><button className="p-3" onClick={()=>setQty(Math.min(product.stock,qty+1))} aria-label="Augmenter"><Plus size={16}/></button></div><button className="btn-primary flex-1 sm:flex-none" onClick={()=>addToCart(product,qty)}><ShoppingCart size={18}/> Ajouter au panier</button><button className={`btn-secondary p-3 ${isFavorite(product.id)?"border-gold-300 text-gold-600 dark:border-gold-700 dark:text-gold-300":""}`} onClick={()=>toggleFavorite(product)} aria-label={isFavorite(product.id)?"Retirer des favoris":"Ajouter aux favoris"}><Heart size={19} fill={isFavorite(product.id)?"currentColor":"none"}/></button><button className="btn-secondary p-3" onClick={async()=>{
   try {
     if (navigator.share) { await navigator.share({title:product.name,url:window.location.href}); }
     else { await navigator.clipboard?.writeText(window.location.href); toast.success("Lien copié"); }
@@ -66,8 +68,8 @@ export default function ProductDetail() {
 }} aria-label="Partager"><Share2 size={19}/></button></div>
       </div>
     </div>
-    <section className="py-12"><SectionHeader title="Produits similaires" subtitle="Filtrage basé sur le contenu"/><div className="grid grid-cols-2 gap-4 sm:grid-cols-4">{similar.map(p=><ProductCard key={p.id} product={p} reason="Caractéristiques similaires"/>)}</div></section>
-    <section className="py-8"><SectionHeader title="Les clients ont aussi acheté" subtitle="Filtrage collaboratif"/><div className="grid grid-cols-2 gap-4 sm:grid-cols-4">{recs.map(p=><ProductCard key={p.id} product={p} reason="Clients similaires"/>)}</div></section>
+    <section className="py-12"><SectionHeader title="Produits similaires" subtitle="Filtrage basé sur le contenu"/><div className="grid grid-cols-2 gap-4 sm:grid-cols-4">{similar.map(p=><ProductCard key={p.id} product={p} reason="Caractéristiques similaires" recommendationSource="product_similar"/>)}</div></section>
+    <section className="py-8"><SectionHeader title="Les clients ont aussi acheté" subtitle="Filtrage collaboratif"/><div className="grid grid-cols-2 gap-4 sm:grid-cols-4">{recs.map(p=><ProductCard key={p.id} product={p} reason="Clients similaires" recommendationSource="product_collaborative"/>)}</div></section>
     <section className="card mt-8 p-6">
       <h2 className="text-xl font-extrabold">Avis clients</h2>
       {isAuthenticated ? (

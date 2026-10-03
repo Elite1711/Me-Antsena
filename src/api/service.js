@@ -1,12 +1,41 @@
 import { supabase } from '../lib/supabase';
+import { filterAndSortProducts } from '../utils/catalog';
 
 const CATEGORY_ICONS = { 'Électronique':'💻','Mode':'👕','Maison':'🏠','Sports':'⚽','Livres':'📚','Bijoux':'💍','Beauté':'💄','Auto':'🚗','Alimentation':'🛒' };
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
-const PRODUCT_SELECT = 'id,name,description,price,stock,category_id,images,tags,created_at,category:categories(id,name,icon)';
-const mapProduct = p => ({ id:p.id,name:p.name,description:p.description||'',price:Number(p.price),oldPrice:0,category:p.category?.name||'Autres',categoryId:p.category_id??null,rating:Number(p.average_rating)||0,reviews:Number(p.review_count)||0,stock:Number(p.stock)||0,image:Array.isArray(p.images)&&p.images[0]?p.images[0]:FALLBACK_IMAGE,images:Array.isArray(p.images)?p.images:[],tags:Array.isArray(p.tags)?p.tags:[] });
+const PRODUCT_SELECT = 'id,name,brand,description,price,stock,category_id,images,tags,created_at,category:categories(id,name,icon)';
+const mapProduct = p => ({ id:p.id,name:p.name,brand:p.brand||'',description:p.description||'',price:Number(p.price),oldPrice:0,category:p.category?.name||'Autres',categoryId:p.category_id??null,rating:Number(p.average_rating)||0,reviews:Number(p.review_count)||0,stock:Number(p.stock)||0,image:Array.isArray(p.images)&&p.images[0]?p.images[0]:FALLBACK_IMAGE,images:Array.isArray(p.images)?p.images:[],tags:Array.isArray(p.tags)?p.tags:[] });
 const mapReview = r => ({ id:r.id,rating:Number(r.rating),comment:r.comment||'',author:`${r.profile?.first_name||''} ${r.profile?.last_name||''}`.trim()||'Client',date:new Date(r.created_at).toLocaleDateString('fr-FR') });
 const STATUS_LABELS={pending:'En cours',paid:'Payée',shipped:'Expédiée',delivered:'Livrée',cancelled:'Annulée'};
 const STATUS_VALUES=Object.fromEntries(Object.entries(STATUS_LABELS).map(([k,v])=>[v,k]));
+const RECOMMENDATION_ATTRIBUTION_KEY = 'me-antsena-recommendation-attribution';
+
+function updateRecommendationAttribution(userId, productId, source) {
+  try {
+    const key = `${RECOMMENDATION_ATTRIBUTION_KEY}:${userId}`;
+    const current = JSON.parse(sessionStorage.getItem(key) || '{}');
+    sessionStorage.setItem(key, JSON.stringify({
+      ...current,
+      [String(productId)]: source,
+    }));
+  } catch (error) {
+    console.error('Impossible de mémoriser la source de recommandation.', error);
+  }
+}
+
+function takeRecommendationAttribution(userId, productId) {
+  try {
+    const key = `${RECOMMENDATION_ATTRIBUTION_KEY}:${userId}`;
+    const current = JSON.parse(sessionStorage.getItem(key) || '{}');
+    const source = current[String(productId)];
+    delete current[String(productId)];
+    sessionStorage.setItem(key, JSON.stringify(current));
+    return typeof source === 'string' ? source : null;
+  } catch (error) {
+    console.error('Impossible de récupérer la source de recommandation.', error);
+    return null;
+  }
+}
 
 async function ensureOk({data,error}) { if(error) throw new Error(error.message); return data; }
 
@@ -45,7 +74,46 @@ export async function getSimilarProducts(productId, allProducts = []) {
 }
 
 export async function getCategories(){ const {data,error}=await supabase.from('categories').select('id,name,icon,products(count)').order('id'); if(error) throw new Error(error.message); return data.map(c=>({id:c.id,name:c.name,icon:c.icon||CATEGORY_ICONS[c.name]||'🏷️',count:c.products?.[0]?.count||0})); }
-export async function getProducts(params={}) { let q=supabase.from('products').select(`${PRODUCT_SELECT},reviews(rating)`).gt('stock',0); if(params.q) q=q.or(`name.ilike.%${params.q}%,description.ilike.%${params.q}%`); if(params.minPrice) q=q.gte('price',Number(params.minPrice)); if(params.maxPrice) q=q.lte('price',Number(params.maxPrice)); if(params.category){const cats=await getCategories();const c=cats.find(x=>x.name===params.category);if(c)q=q.eq('category_id',c.id);} const sort={priceAsc:['price',true],priceDesc:['price',false],newest:['created_at',false],rating:['created_at',false]}[params.sort]||['created_at',false]; q=q.order(sort[0],{ascending:sort[1]}).limit(60); const {data,error}=await q; if(error) throw new Error(error.message); return (data||[]).map(p=>({...mapProduct(p),rating:p.reviews?.length?p.reviews.reduce((a,r)=>a+Number(r.rating),0)/p.reviews.length:0,reviews:p.reviews?.length||0})); }
+export async function getProducts(params = {}) {
+  let query = supabase
+    .from('products')
+    .select(`${PRODUCT_SELECT},reviews(rating)`)
+    .gt('stock', 0);
+
+  if (params.q) {
+    query = query.or(`name.ilike.%${params.q}%,description.ilike.%${params.q}%`);
+  }
+  if (params.minPrice !== undefined && params.minPrice !== '') {
+    query = query.gte('price', Number(params.minPrice));
+  }
+  if (params.maxPrice !== undefined && params.maxPrice !== '') {
+    query = query.lte('price', Number(params.maxPrice));
+  }
+  if (params.category) {
+    const categories = await getCategories();
+    const category = categories.find(item => item.name === params.category);
+    if (category) query = query.eq('category_id', category.id);
+  }
+
+  const sort = {
+    priceAsc: ['price', true],
+    priceDesc: ['price', false],
+    newest: ['created_at', false],
+    rating: ['created_at', false],
+  }[params.sort] || ['created_at', false];
+  const { data, error } = await query.order(sort[0], { ascending: sort[1] }).limit(60);
+  if (error) throw new Error(error.message);
+
+  const products = (data || []).map(product => ({
+    ...mapProduct(product),
+    rating: product.reviews?.length
+      ? product.reviews.reduce((sum, review) => sum + Number(review.rating), 0) / product.reviews.length
+      : 0,
+    reviews: product.reviews?.length || 0,
+  }));
+
+  return filterAndSortProducts(products, params);
+}
 export async function getProduct(id){ const {data,error}=await supabase.from('products').select(`${PRODUCT_SELECT},reviews(rating)`).eq('id',id).single(); if(error) return null; return {...mapProduct(data),rating:data.reviews?.length?data.reviews.reduce((a,r)=>a+Number(r.rating),0)/data.reviews.length:0,reviews:data.reviews?.length||0}; }
 export async function getRecommendations(){
   try {
@@ -109,7 +177,49 @@ export async function getRecommendations(){
     };
   }
 }
-export async function logInteraction(productId,type,value){ const {data:{user}}=await supabase.auth.getUser(); if(!user)return; await supabase.from('interactions').insert({user_id:user.id,product_id:productId,type,value:value==null?null:Number(value)}); }
+export async function logInteraction(productId, type, value, metadata = {}) {
+  let user;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      console.error('Impossible de vérifier la session pour enregistrer une interaction.', error);
+      return;
+    }
+    user = data.user;
+  } catch (error) {
+    console.error('Impossible de vérifier la session pour enregistrer une interaction.', error);
+    return;
+  }
+  if (!user) return;
+  if (type === 'recommendation_click' && productId != null && metadata.recommendationSource) {
+    updateRecommendationAttribution(user.id, productId, metadata.recommendationSource);
+  }
+
+  const interaction = {
+    user_id: user.id,
+    product_id: productId,
+    type,
+    value: value == null ? null : Number(value),
+  };
+  const searchQuery = typeof metadata.searchQuery === 'string'
+    ? metadata.searchQuery.trim().slice(0, 200)
+    : '';
+  if (type === 'search') {
+    if (!searchQuery) return;
+    interaction.search_query = searchQuery;
+  }
+
+  const recommendationSource = metadata.recommendationSource
+    || (type === 'purchase' && productId != null ? takeRecommendationAttribution(user.id, productId) : null);
+  if (recommendationSource) interaction.recommendation_source = recommendationSource;
+
+  try {
+    const { error } = await supabase.from('interactions').insert(interaction);
+    if (error) console.error('Impossible d’enregistrer l’interaction.', error);
+  } catch (error) {
+    console.error('Impossible d’enregistrer l’interaction.', error);
+  }
+}
 export async function getFavorites(){ const {data,error}=await supabase.from('favorites').select(`product:products(${PRODUCT_SELECT},reviews(rating))`).order('created_at',{ascending:false}); if(error) throw new Error(error.message); return data.map(x=>mapProduct(x.product)); }
 export const addFavorite=productId=>supabase.from('favorites').insert({product_id:productId}).then(ensureOk);
 export const removeFavorite=productId=>supabase.from('favorites').delete().eq('product_id',productId).then(ensureOk);
@@ -194,7 +304,7 @@ async function uploadProductImage(image){ if(!image||!image.startsWith('data:'))
     : `id-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
   const path = `${uuid}.${ext}`;
   const {error}=await supabase.storage.from('product-images').upload(path,blob,{contentType:blob.type,upsert:false});if(error)throw new Error(error.message);const {data}=supabase.storage.from('product-images').getPublicUrl(path);return data.publicUrl; }
-export async function adminSaveProduct(form){const cats=await getCategories();const cat=cats.find(c=>c.name===form.category);const image=await uploadProductImage(form.image);const payload={name:form.name.trim(),description:form.description||'',price:Number(form.price)||0,category_id:cat?.id||null,stock:Number(form.stock)||0,images:image?[image]:[],tags:Array.isArray(form.tags)?form.tags:[]};let result;if(form.id&&form.__existing)result=await supabase.from('products').update(payload).eq('id',form.id).select(`${PRODUCT_SELECT}`).single();else result=await supabase.from('products').insert(payload).select(`${PRODUCT_SELECT}`).single();if(result.error)throw new Error(result.error.message);return mapProduct(result.data);}
+export async function adminSaveProduct(form){const cats=await getCategories();const cat=cats.find(c=>c.name===form.category);const image=await uploadProductImage(form.image);const payload={name:form.name.trim(),brand:form.brand?.trim()||'',description:form.description||'',price:Number(form.price)||0,category_id:cat?.id||null,stock:Number(form.stock)||0,images:image?[image]:[],tags:Array.isArray(form.tags)?form.tags:[]};let result;if(form.id&&form.__existing)result=await supabase.from('products').update(payload).eq('id',form.id).select(`${PRODUCT_SELECT}`).single();else result=await supabase.from('products').insert(payload).select(`${PRODUCT_SELECT}`).single();if(result.error)throw new Error(result.error.message);return mapProduct(result.data);}
 export const adminDeleteProduct=id=>supabase.from('products').delete().eq('id',id).then(ensureOk);
 export async function adminGetUsers(){const {data,error}=await supabase.from('profiles').select('id,first_name,last_name,email,phone,role,status,created_at').order('created_at',{ascending:false});if(error)throw new Error(error.message);return data.map(u=>({id:u.id,name:`${u.first_name} ${u.last_name}`.trim(),email:u.email,status:u.status==='active'?'Actif':'Suspendu',role:u.role,createdAt:u.created_at}));}
 export const adminSetUserStatus=async(id,status)=>{const {data,error}=await supabase.rpc('admin_set_user_status',{p_user_id:id,p_status:status==='Actif'?'active':'suspended'});if(error)throw new Error(error.message);return data;};

@@ -2,6 +2,8 @@
 
 import os
 import pickle
+import re
+import unicodedata
 from typing import Iterable, List, Tuple
 
 import numpy as np
@@ -14,36 +16,78 @@ class ContentBasedModel:
     """Content-based filtering using TF-IDF and cosine similarity."""
 
     def __init__(self):
-        self.vectorizer = TfidfVectorizer(max_features=5000, stop_words="english")
+        self.vectorizer = TfidfVectorizer(
+            max_features=5000,
+            stop_words="english",
+            strip_accents="unicode",
+        )
         self.product_features = None
         self.product_ids: list[int] = []
         self.product_index: dict[int, int] = {}
+        self.price_thresholds: tuple[float, ...] = ()
+
+    @staticmethod
+    def _normalize_field(value: object) -> str:
+        normalized = unicodedata.normalize("NFKD", str(value or ""))
+        ascii_text = normalized.encode("ascii", "ignore").decode("ascii").lower()
+        return " ".join(re.findall(r"[a-z0-9]+", ascii_text))
+
+    def _price_feature(self, value: object) -> str:
+        try:
+            price = float(value)
+        except (TypeError, ValueError):
+            return ""
+        price_thresholds = getattr(self, "price_thresholds", ())
+        if not np.isfinite(price) or price < 0 or not price_thresholds:
+            return ""
+        tier = sum(price >= threshold for threshold in price_thresholds)
+        return ("priceband_budget", "priceband_value", "priceband_premium", "priceband_luxury")[tier]
 
     def _build_text(self, product: dict) -> str:
         tags = product.get("tags") or []
-        if isinstance(tags, list):
-            tags = " ".join(str(tag) for tag in tags if tag)
+        if isinstance(tags, str):
+            tags = re.split(r"[,;|]", tags)
+        elif not isinstance(tags, (list, tuple, set)):
+            tags = [tags]
+        normalized_tags = " ".join(
+            self._normalize_field(tag) for tag in tags if tag
+        )
 
         category = product.get("category")
         if isinstance(category, dict):
             category = category.get("name") or category.get("category") or category.get("label") or ""
 
-        brand = product.get("brand") or ""
+        brand = self._normalize_field(product.get("brand"))
         category_raw = product.get("category_raw") or ""
 
         return " ".join(
-            [
+            part for part in [
                 str(product.get("name") or ""),
-                str(brand),
+                brand,
                 str(category or ""),
                 str(category_raw),
                 str(product.get("description") or ""),
-                str(tags or ""),
+                normalized_tags,
+                self._price_feature(product.get("price")),
             ]
+            if part
         )
 
     def fit(self, products: List[dict]):
         """Train the model on rich product text."""
+        prices = []
+        for product in products:
+            try:
+                price = float(product.get("price"))
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(price) and price >= 0:
+                prices.append(price)
+        self.price_thresholds = (
+            tuple(float(value) for value in np.quantile(prices, [0.25, 0.5, 0.75]))
+            if prices
+            else ()
+        )
         texts = [self._build_text(product) for product in products]
         self.product_ids = [int(product["id"]) for product in products]
         self.product_index = {product_id: idx for idx, product_id in enumerate(self.product_ids)}
@@ -138,4 +182,3 @@ class ContentBasedModel:
         """Load model from disk."""
         with open(path, "rb") as file_obj:
             return pickle.load(file_obj)
-

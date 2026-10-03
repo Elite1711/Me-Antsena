@@ -9,6 +9,15 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))  #
 import numpy as np
 from supabase import create_client
 
+INTERACTION_WEIGHTS = {
+    "view": 1.0,
+    "recommendation_click": 1.5,
+    "favorite": 2.0,
+    "add_to_cart": 2.5,
+    "purchase": 5.0,
+}
+CONTENT_SEED_TYPES = frozenset(INTERACTION_WEIGHTS)
+
 
 def get_supabase_client():
     """Crée le client Supabase à partir des variables d'environnement.
@@ -28,7 +37,7 @@ def get_supabase_client():
 def fetch_products(supabase_client) -> List[dict]:
     """Récupère le catalogue produits avec le nom de catégorie résolu."""
     resp = supabase_client.table("products").select(
-        "id, name, description, category_id, tags, category:categories(id,name)"
+        "id, name, brand, description, price, category_id, tags, category:categories(id,name)"
     ).execute()
     error = getattr(resp, "error", None)
     if error:
@@ -41,17 +50,27 @@ def fetch_products(supabase_client) -> List[dict]:
         else:
             product["category_name"] = None
         product["category_raw"] = product.get("category_name") or ""
-        product["brand"] = ""
+        product["brand"] = product.get("brand") or ""
     return products
 
 
 def fetch_interactions(supabase_client) -> List[dict]:
-    """Récupère les interactions utilisateur-produit (vue, favori, panier, achat)."""
-    resp = supabase_client.table("interactions").select("user_id, product_id, type").execute()
+    """Récupère les interactions produit utilisées par l'entraînement et l'évaluation."""
+    resp = (
+        supabase_client.table("interactions")
+        .select("user_id, product_id, type")
+        .in_("type", sorted(INTERACTION_WEIGHTS))
+        .execute()
+    )
     error = getattr(resp, "error", None)
     if error:
         raise RuntimeError(f"Erreur Supabase (interactions): {getattr(error, 'message', error)}")
-    return getattr(resp, "data", None) or []
+    return [
+        interaction
+        for interaction in (getattr(resp, "data", None) or [])
+        if interaction.get("product_id") is not None
+        and (interaction.get("type") or "view").lower() in INTERACTION_WEIGHTS
+    ]
 
 
 def fetch_user_interactions(supabase_client, user_id: str) -> List[dict]:
@@ -66,6 +85,7 @@ def fetch_user_interactions(supabase_client, user_id: str) -> List[dict]:
         supabase_client.table("interactions")
         .select("product_id, type, created_at")
         .eq("user_id", user_id)
+        .in_("type", sorted(CONTENT_SEED_TYPES))
         .order("created_at", desc=True)
         .limit(50)
         .execute()
@@ -76,11 +96,28 @@ def fetch_user_interactions(supabase_client, user_id: str) -> List[dict]:
     return getattr(resp, "data", None) or []
 
 
+def content_seed_product_ids(interactions: List[dict]) -> List[int]:
+    """Returns distinct product IDs in the given newest-first interaction sequence."""
+    product_ids = []
+    seen = set()
+    for interaction in interactions:
+        if (interaction.get("type") or "").lower() not in CONTENT_SEED_TYPES:
+            continue
+        try:
+            product_id = int(interaction["product_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if product_id not in seen:
+            seen.add(product_id)
+            product_ids.append(product_id)
+    return product_ids
+
+
 def fetch_product_by_id(supabase_client, product_id: int) -> Optional[dict]:
     """Récupère un produit unique (pour l'indexation à la volée d'un item cold-start)."""
     resp = (
         supabase_client.table("products")
-        .select("id, name, description, category_id, tags, category:categories(id,name)")
+        .select("id, name, brand, description, price, category_id, tags, category:categories(id,name)")
         .eq("id", product_id)
         .limit(1)
         .execute()
@@ -97,14 +134,27 @@ def fetch_product_by_id(supabase_client, product_id: int) -> Optional[dict]:
     else:
         product["category_name"] = None
     product["category_raw"] = product.get("category_name") or ""
-    product["brand"] = ""
+    product["brand"] = product.get("brand") or ""
     return product
 
 
 def build_interaction_matrix(interactions: List[dict]) -> Tuple[np.ndarray, List[str], List[int]]:
     """Construit la matrice utilisateurs x produits pondérée par type d'interaction."""
-    user_ids = sorted({str(i["user_id"]) for i in interactions if i.get("user_id") is not None})
-    item_ids = sorted({int(i["product_id"]) for i in interactions if i.get("product_id") is not None})
+    product_interactions = []
+    for interaction in interactions:
+        interaction_type = (interaction.get("type") or "view").lower()
+        if interaction_type not in INTERACTION_WEIGHTS:
+            continue
+        if interaction.get("user_id") is None or interaction.get("product_id") is None:
+            continue
+        try:
+            product_id = int(interaction["product_id"])
+        except (TypeError, ValueError):
+            continue
+        product_interactions.append((interaction, interaction_type, product_id))
+
+    user_ids = sorted({str(interaction["user_id"]) for interaction, _, _ in product_interactions})
+    item_ids = sorted({product_id for _, _, product_id in product_interactions})
 
     user_index = {u: idx for idx, u in enumerate(user_ids)}
     item_index = {p: idx for idx, p in enumerate(item_ids)}
@@ -113,18 +163,11 @@ def build_interaction_matrix(interactions: List[dict]) -> Tuple[np.ndarray, List
         return np.zeros((0, 0)), user_ids, item_ids
 
     mat = np.zeros((len(user_ids), len(item_ids)), dtype=float)
-    # Pondération : un achat compte bien plus qu'une simple vue.
-    weight_map = {"view": 1.0, "favorite": 2.0, "add_to_cart": 2.5, "purchase": 5.0}
 
-    for it in interactions:
-        try:
-            u = str(it.get("user_id"))
-            p = int(it.get("product_id"))
-        except (TypeError, ValueError):
-            continue
+    for it, interaction_type, p in product_interactions:
+        u = str(it["user_id"])
         if u not in user_index or p not in item_index:
             continue
-        t = (it.get("type") or "view").lower()
-        mat[user_index[u], item_index[p]] += weight_map.get(t, 1.0)
+        mat[user_index[u], item_index[p]] += INTERACTION_WEIGHTS[interaction_type]
 
     return mat, user_ids, item_ids

@@ -23,6 +23,35 @@ VITE_ML_SERVICE_URL=http://localhost:8000
 
 Puis exécutez `supabase/schema.sql` dans Supabase SQL Editor.
 
+## Application mobile
+
+L’application React Native/Expo est dans `mobile/` et utilise **Expo SDK 54** avec
+TypeScript. Elle reprend les parcours de la boutique (catalogue, catégories,
+recommandations, favoris, panier, commande, compte, avis et notifications) ainsi que
+les outils d’administration.
+
+```bash
+cd mobile
+npm install
+cp .env.example .env
+npm run start
+```
+
+Renseignez dans `mobile/.env` les variables `EXPO_PUBLIC_SUPABASE_URL` et
+`EXPO_PUBLIC_SUPABASE_ANON_KEY`. `EXPO_PUBLIC_ML_URL` est facultative; sans elle,
+les recommandations utilisent le repli Supabase. Pour les liens de réinitialisation
+de mot de passe, autorisez aussi `me-antsena://auth/reset-password` dans la liste des
+URL de redirection de Supabase Auth. Lancer `npm run android` ou
+`npm run ios` pour ouvrir la cible native, ou `npm run web` pour la prévisualisation
+web Expo.
+
+Validation TypeScript :
+
+```bash
+cd mobile
+npm run typecheck
+```
+
 ### Administrateur
 
 Créez d'abord un compte sur `/register`, puis exécutez :

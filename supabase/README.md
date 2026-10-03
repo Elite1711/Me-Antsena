@@ -2,6 +2,9 @@
 
 1. Créez un projet sur Supabase.
 2. Dans **SQL Editor**, exécutez `schema.sql` en entier.
+   Pour une base déjà créée, exécutez aussi
+   `migrations/20261003000000_recommendation_signals.sql` afin d'ajouter les
+   colonnes de marque et d'attribution nécessaires aux nouveaux signaux.
 3. Dans **Authentication > Providers > Email**, activez Email/Password.
    - Pour un démarrage immédiat sans validation email, désactivez temporairement **Confirm email**.
    - En production, il est recommandé de laisser la confirmation email activée.

@@ -31,7 +31,13 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from data import fetch_product_by_id, fetch_products, fetch_user_interactions, get_supabase_client
+from data import (
+    content_seed_product_ids,
+    fetch_product_by_id,
+    fetch_products,
+    fetch_user_interactions,
+    get_supabase_client,
+)
 from evaluation import run_evaluation
 from models import HybridRecommender
 from train import load_artifacts, train_and_save
@@ -169,9 +175,19 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
         cf_items = [RecommendationItem(product_id=pid, score=score) for pid, score in cf_preds[:top_k]]
 
         cb_preds: List[tuple] = []
-        if cb.product_features is not None and cf_preds:
-            seed_ids = [pid for pid, _ in cf_preds[:top_k]]
-            cb_preds = cb.recommend_from_history(seed_ids, top_k=top_k * 2)
+        try:
+            supabase = get_supabase_client()
+            recent = fetch_user_interactions(supabase, user_id)
+            seed_ids = content_seed_product_ids(recent)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Impossible de récupérer les interactions live de %s: %s", user_id, exc)
+            seed_ids = []
+        if cb.product_features is not None and seed_ids:
+            cb_preds = cb.recommend_from_history(
+                seed_ids,
+                top_k=top_k * 2,
+                exclude_product_ids=seed_ids,
+            )
         cb_items = [RecommendationItem(product_id=pid, score=score) for pid, score in cb_preds[:top_k]]
 
         combined = state["hybrid"].recommend(cf_preds, cb_preds, top_k=top_k)
@@ -185,7 +201,7 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
             source="hybrid",
             items=hybrid_items,
             collaborative=cf_items or _popularity_items(cf, top_k),
-            content=cb_items or _popularity_items(cf, top_k),
+            content=cb_items,
             hybrid=hybrid_items,
         )
 
@@ -197,12 +213,12 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
     try:
         supabase = get_supabase_client()
         recent = fetch_user_interactions(supabase, user_id)
-        seed_ids = [int(it["product_id"]) for it in recent if it.get("product_id") is not None]
+        seed_ids = content_seed_product_ids(recent)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Impossible de récupérer les interactions live de %s: %s", user_id, exc)
 
     cb_preds = (
-        cb.recommend_from_history(seed_ids, top_k=top_k)
+        cb.recommend_from_history(seed_ids, top_k=top_k, exclude_product_ids=seed_ids)
         if seed_ids and cb.product_features is not None
         else []
     )

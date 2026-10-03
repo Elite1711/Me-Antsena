@@ -61,16 +61,12 @@ une fois le service lancé.
 4. Variables d'environnement à renseigner dans Render : `SUPABASE_URL`, `SUPABASE_KEY` (service_role), `ALLOWED_ORIGINS`.
 5. Une fois déployé, appeler `POST /train` une première fois (puis idéalement sur un cron, ex. quotidien) pour peupler `artifacts/`.
 
-## Prochaine étape : brancher le frontend
+## Intégration frontend
 
-`src/api/service.js` lit actuellement la table `recommendations` directement
-via Supabase. Il faudra le modifier pour appeler ce service à la place, par
-exemple :
-
-```js
-const res = await fetch(`${import.meta.env.VITE_ML_SERVICE_URL}/recommendations/${userId}?top_k=10`);
-const { items } = await res.json();
-```
+Le frontend appelle le service lorsque `VITE_ML_SERVICE_URL` est configurée.
+Il hydrate les identifiants recommandés avec le catalogue Supabase et conserve
+un repli sur la table `recommendations`, puis sur les produits disponibles si
+le service ne répond pas.
 
 ## Évaluation quantitative (Precision@K, Recall@K, RMSE)
 
@@ -86,6 +82,19 @@ Ce endpoint :
    - **Precision@K** / **Recall@K** : une interaction du test set compte comme "pertinente" si c'est un favori, un ajout au panier ou un achat (une simple vue est jugée trop faible signal). Seuls les utilisateurs déjà présents dans le train set sont évalués — un utilisateur inconnu relève du cold-start, traité comme une limite distincte au Chapitre 4, pas comme un échec du modèle.
    - **RMSE** : écart entre le score prédit (produit scalaire des embeddings) et le poids réel de l'interaction (vue=1, favori=2, panier=2.5, achat=5).
 5. Archive chaque appel avec horodatage dans `artifacts/evaluation_history.json`, pour pouvoir citer l'évolution des métriques dans le mémoire sans relancer les calculs.
+
+Pour suivre l'évolution chaque semaine, planifiez un appel à l'endpoint avec le
+cron de votre hébergeur ou un ordonnanceur externe. Exemple de commande à
+exécuter le lundi à 05:00 UTC :
+
+```bash
+curl --fail --silent --show-error \
+  "https://<votre-service-ml>/evaluate?k=10&test_ratio=0.2"
+```
+
+Chaque appel produit une nouvelle entrée horodatée dans l'historique du service.
+Après application de la migration Supabase, relancez aussi `POST /train` pour
+reconstruire les artefacts avec les marques, les prix et les tags normalisés.
 
 Un test de fumée sur données synthétiques (sans Supabase) permet de vérifier que le module fonctionne :
 
@@ -121,6 +130,16 @@ Gérée directement dans les modèles (pas seulement au niveau de l'API) :
   cold_start_fallback=False)` : les métriques du Chapitre 4 restent honnêtes
   sur ce que le modèle collaboratif sait vraiment prédire, sans être gonflées
   par le repli.
+- Les recherches sont enregistrées à part et ne deviennent pas des pseudo-vues
+  dans la matrice utilisateur-produit. Les clics sur recommandations enrichissent
+  la matrice ; les achats restent le signal de conversion fort, avec leur source
+  de recommandation quand elle est disponible.
+- Pour les utilisateurs connus, la liste content-based est désormais amorcée
+  avec leurs interactions produit récentes, et non avec les produits prévus par
+  le collaboratif.
+- Le TF-IDF exploite les marques, les tags normalisés et une tranche de prix
+  relative au catalogue. La marque doit être renseignée dans l'administration
+  pour contribuer au profil du produit.
 
 Ce comportement est directement exploitable comme réponse à la limite "démarrage
 à froid" identifiée au Chapitre 4 du mémoire — avec, en prime, un `source` explicite

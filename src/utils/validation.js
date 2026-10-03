@@ -5,7 +5,7 @@ export function validateRegister(data) {
   if (!data.firstName?.trim()) errors.firstName = "Prénom requis";
   if (!data.lastName?.trim()) errors.lastName = "Nom requis";
   if (!isEmail(data.email || "")) errors.email = "Email invalide";
-  if ((data.phone || "").replace(/\D/g, "").length < 9) errors.phone = "Téléphone invalide";
+  if (data.phone?.trim() && data.phone.replace(/\D/g, "").length < 9) errors.phone = "Téléphone invalide";
   if ((data.password || "").length < 8) errors.password = "8 caractères minimum";
   if (data.password !== data.confirmPassword) errors.confirmPassword = "Les mots de passe ne correspondent pas";
   if (!data.accepted) errors.accepted = "Vous devez accepter les conditions";
