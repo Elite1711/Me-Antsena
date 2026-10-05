@@ -37,7 +37,7 @@ def get_supabase_client():
 def fetch_products(supabase_client) -> List[dict]:
     """Récupère le catalogue produits avec le nom de catégorie résolu."""
     resp = supabase_client.table("products").select(
-        "id, name, brand, description, price, category_id, tags, category:categories(id,name)"
+        "id, name, brand, description, price, stock, category_id, tags, category:categories(id,name)"
     ).execute()
     error = getattr(resp, "error", None)
     if error:

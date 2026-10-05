@@ -70,6 +70,10 @@ export const translations = {
     contentFiltering: { Français: "Filtrage basé sur le contenu", Malagasy: "Filterina mifototra amin'ny atiny", English: "Content-based filtering" },
     trends: { Français: "Tendances du moment", Malagasy: "Lamboa ankehitriny", English: "Trending now" },
     globalPopularity: { Français: "Popularité globale", Malagasy: "Laza maneran-tany", English: "Global popularity" },
+    mostPopular: { Français: "Les plus populaires", Malagasy: "Malaza indrindra", English: "Most popular" },
+    interactionPopularity: { Français: "Classés selon les interactions observées lors du dernier entraînement", Malagasy: "Voalahatra araka ny fifandraisana hita tamin'ny fanofanana farany", English: "Ranked by interactions observed during the latest model training" },
+    newestFallback: { Français: "Nouveautés", Malagasy: "Vokatra vaovao", English: "New arrivals" },
+    newestFallbackDescription: { Français: "Sélection récente du catalogue (classement de popularité indisponible)", Malagasy: "Vokatra vao haingana (tsy misy ny filaharana araka ny lazany)", English: "Recently added products (popularity ranking unavailable)" },
     productsCount: { Français: "produits", Malagasy: "vokatra", English: "products" },
     viewAll: { Français: "Voir tout", Malagasy: "Jereo daholo", English: "View all" },
     recentlyViewed: { Français: "Vu récemment", Malagasy: "Nijery vao haingana", English: "Recently viewed" }

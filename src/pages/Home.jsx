@@ -1,16 +1,21 @@
 import { ArrowRight, ShieldCheck, Sparkles, Truck, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getCategories, getRecommendations, getProducts } from "../api/service";
+import { getCategories, getRecommendations, getTrendingProducts } from "../api/service";
 import ProductCard from "../components/ProductCard";
 import SectionHeader from "../components/SectionHeader";
 import { useTranslation } from "../hooks/useTranslation";
 
 export default function Home() {
-  const [data, setData] = useState({ products: [], recs: null, categories: [] });
+  const [data, setData] = useState({
+    trending: { products: [], source: "newest_fallback" },
+    recs: null,
+    categories: [],
+  });
   const { t } = useTranslation();
   useEffect(() => {
-    Promise.all([getProducts(), getRecommendations(), getCategories()]).then(([products,recs,categories]) => setData({ products,recs,categories }));
+    Promise.all([getTrendingProducts(), getRecommendations(), getCategories()])
+      .then(([trending, recs, categories]) => setData({ trending, recs, categories }));
   }, []);
   return <div>
     <section className="container-app pt-5 sm:pt-8">
@@ -35,7 +40,7 @@ export default function Home() {
     </section>
     <section className="container-app py-8"><SectionHeader title={t("home.recommendedForYou")} subtitle={t("home.basedOnCommunity")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{data.recs?.hybrid.slice(0, 4).map(p=><ProductCard key={p.id} product={p} reason={t("home.recommendedForYou")} recommendationSource="home_hybrid"/>)}</div></section>
     <section className="container-app py-8"><SectionHeader title={t("home.recentConsults")} subtitle={t("home.contentFiltering")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{data.recs?.content.slice(0, 4).map(p=><ProductCard key={p.id} product={p} reason={t("home.recentlyViewed")} recommendationSource="home_content"/>)}</div></section>
-    <section className="container-app py-8"><SectionHeader title={t("home.trends")} subtitle={t("home.globalPopularity")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">{data.products.slice(0,5).map(p=><ProductCard key={p.id} product={p}/>)}</div></section>
+    <section className="container-app py-8"><SectionHeader title={t(data.trending.source === "interaction_popularity" ? "home.mostPopular" : "home.newestFallback")} subtitle={t(data.trending.source === "interaction_popularity" ? "home.interactionPopularity" : "home.newestFallbackDescription")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">{data.trending.products.map(p=><ProductCard key={p.id} product={p}/>)}</div></section>
   </div>;
 }
 function TrustItem({icon:Icon,text}) { return <div className="flex items-center gap-2"><Icon size={16} className="text-sage-600 dark:text-sage-300"/><span>{text}</span></div>; }

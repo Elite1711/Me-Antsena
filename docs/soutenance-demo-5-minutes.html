@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Me-Antsena — Démonstration de soutenance en 5 minutes</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 16mm 17mm 17mm;
+      @bottom-right {
+        content: "Me-Antsena • Démonstration de soutenance";
+        color: #64748b;
+        font: 8pt Arial, sans-serif;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      color: #172554;
+      font: 10pt/1.42 Arial, Helvetica, sans-serif;
+      margin: 0;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: 26pt; line-height: 1.08; margin-bottom: 8pt; }
+    h2 { color: #1d4ed8; font-size: 16pt; margin: 0 0 8pt; }
+    h3 { color: #1e3a8a; font-size: 10pt; margin: 0 0 4pt; }
+    p { margin-bottom: 6pt; }
+    .cover {
+      background: #eff6ff;
+      border-left: 6px solid #2563eb;
+      border-radius: 4px;
+      margin-bottom: 12pt;
+      padding: 15pt 17pt;
+    }
+    .kicker {
+      color: #2563eb;
+      font-size: 8pt;
+      font-weight: bold;
+      letter-spacing: 1.6px;
+      margin-bottom: 7pt;
+      text-transform: uppercase;
+    }
+    .subtitle { color: #475569; font-size: 12pt; margin: 0; }
+    .note, .say, .warning, .expected {
+      border-radius: 4px;
+      margin: 5pt 0 8pt;
+      padding: 7pt 9pt;
+    }
+    .say { background: #f1f5f9; border-left: 3px solid #3b82f6; }
+    .say p { font-style: italic; margin: 3pt 0 0; }
+    .note { background: #f8fafc; border: 1px solid #cbd5e1; }
+    .expected { background: #ecfdf5; border-left: 3px solid #10b981; }
+    .warning { background: #fff7ed; border-left: 3px solid #f97316; }
+    .tag {
+      color: #1d4ed8;
+      font-size: 9pt;
+      font-weight: bold;
+    }
+    .step {
+      border-bottom: 1px solid #dbeafe;
+      break-inside: avoid;
+      margin-bottom: 8pt;
+      padding-bottom: 5pt;
+      page-break-inside: avoid;
+    }
+    .say, .note, .expected, .warning, .closing { break-inside: avoid; page-break-inside: avoid; }
+    .step-head {
+      align-items: baseline;
+      display: flex;
+      gap: 9pt;
+      margin-bottom: 4pt;
+    }
+    .time {
+      background: #1d4ed8;
+      border-radius: 10px;
+      color: white;
+      flex: 0 0 76pt;
+      font-size: 8pt;
+      font-weight: bold;
+      padding: 3pt 6pt;
+      text-align: center;
+    }
+    .step h2 { font-size: 12pt; margin: 0; }
+    .do { margin: 3pt 0 4pt; }
+    .small { color: #475569; font-size: 8.5pt; }
+    .page-break { break-before: page; page-break-before: always; margin: 0; }
+    ul { margin: 3pt 0 5pt; padding-left: 16pt; }
+    li { margin: 2pt 0; }
+    .route { color: #0f766e; font-family: "Courier New", monospace; font-weight: bold; }
+    .closing {
+      background: #172554;
+      border-radius: 5px;
+      color: white;
+      margin-top: 7pt;
+      padding: 10pt 12pt;
+    }
+    .closing h2 { color: #bfdbfe; font-size: 11pt; }
+    .closing p { margin: 0; }
+    .footer-note { border-top: 1px solid #cbd5e1; color: #64748b; font-size: 8pt; margin-top: 9pt; padding-top: 5pt; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="kicker">Guide de démonstration • 5 minutes</div>
+    <h1>Me-Antsena</h1>
+    <p class="subtitle">Parcours client, recommandations et vérification du service ML</p>
+  </section>
+
+  <div class="note">
+    <h3>À préparer avant l’arrivée du jury (hors chronomètre)</h3>
+    <p class="small">Démarrer frontend et ML, vérifier <span class="route">/health</span> (HTTP 200), ouvrir <span class="route">/docs</span> et se connecter au compte de démonstration autorisé. Prévoir un produit en stock. Ne pas afficher de secret, lancer <code>/train</code>, ni confirmer une commande : le paiement est simulé.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="time">0:00–0:25</span><h2>1. Présenter l’objectif</h2></div>
+    <p class="do"><b>À l’écran :</b> page d’accueil, sans naviguer encore.</p>
+    <div class="say"><span class="tag">À dire</span><p>« Je vais vous montrer le parcours d’un client, puis vérifier comment les recommandations sont calculées. L’application combine un site React, Supabase pour les données, et un service Python qui expose les modèles de recommandation par API. »</p></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="time">0:25–0:50</span><h2>2. Situer les recommandations sur l’accueil</h2></div>
+    <p class="do"><b>À cliquer :</b> faire défiler légèrement jusqu’aux blocs de recommandations, puis montrer leurs titres.</p>
+    <div class="say"><span class="tag">À dire</span><p>« L’accueil distingue les recommandations pour l’utilisateur, celles fondées sur les consultations récentes, et les tendances. Ces blocs n’ont pas tous le même rôle : les deux premiers sont personnalisés ou calculés par le moteur ; les tendances sont une sélection générale du catalogue. »</p></div>
+  </div>
+
+  <p class="page-break">&#160;</p>
+  <div class="step">
+    <div class="step-head"><span class="time">0:50–1:25</span><h2>3. Rechercher un produit</h2></div>
+    <p class="do"><b>À cliquer :</b> cliquer sur « Produits », saisir <b>casque</b> dans la recherche, puis attendre les résultats.</p>
+    <div class="expected"><b>À observer :</b> le catalogue affiche le casque correspondant. La recherche peut être saisie dans la barre du haut ; elle ouvre le catalogue filtré.</div>
+    <div class="say"><span class="tag">À dire</span><p>« La recherche filtre le catalogue à partir du nom et de la description. La recherche peut aussi être enregistrée comme interaction pour enrichir les données d’usage ; ce n’est pas, à elle seule, une preuve que le modèle a déjà été réentraîné. »</p></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="time">1:25–2:05</span><h2>4. Expliquer les trois approches</h2></div>
+    <p class="do"><b>À cliquer :</b> revenir à « Accueil » et désigner les blocs « Recommandé pour vous », « Basé sur vos consultations récentes » et « Tendances du moment ».</p>
+    <div class="say"><span class="tag">À dire</span><p>« Le filtrage collaboratif cherche des produits appréciés par des utilisateurs aux comportements proches. Le filtrage basé sur le contenu compare les caractéristiques des produits, par exemple le texte et les tags. L’hybride combine les deux classements. Pour un utilisateur inconnu ou sans historique exploitable, le service peut utiliser un démarrage à froid et proposer des produits populaires. »</p></div>
+  </div>
+
+  <p class="page-break">&#160;</p>
+  <div class="step">
+    <div class="step-head"><span class="time">2:05–3:05</span><h2>5. Ouvrir une fiche et montrer les recommandations</h2></div>
+    <p class="do"><b>À cliquer :</b> revenir aux résultats « casque », ouvrir la fiche du casque, puis faire défiler vers « Produits similaires » et « Les clients ont aussi acheté ».</p>
+    <div class="expected"><b>À observer :</b> les produits similaires illustrent le content-based ; les produits « clients ont aussi acheté » illustrent le collaboratif. Un clic sur une carte recommandée est suivi comme interaction.</div>
+    <div class="say"><span class="tag">À dire</span><p>« Cette fiche sépare deux explications : la similarité vient des caractéristiques du produit ; l’autre bloc s’appuie sur les comportements d’autres utilisateurs. Le clic sur une recommandation peut être enregistré comme signal pour mieux comprendre ce qui intéresse la personne. »</p></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="time">3:05–3:35</span><h2>6. Montrer le parcours panier sans passer commande</h2></div>
+    <p class="do"><b>À cliquer :</b> « Ajouter au panier », ouvrir le panier, vérifier le sous-total, la livraison et le total. Ne pas cliquer sur « Confirmer la commande ».</p>
+    <div class="say"><span class="tag">À dire</span><p>« Je vérifie ici le parcours d’achat et le calcul du total. Le paiement est indiqué comme une simulation : je ne déclenche donc pas de commande réelle pendant la démonstration. »</p></div>
+  </div>
+
+  <p class="page-break">&#160;</p>
+  <div class="step">
+    <div class="step-head"><span class="time">3:35–4:35</span><h2>7. Vérifier le service ML</h2></div>
+    <p class="do"><b>À cliquer :</b> ouvrir l’onglet <span class="route">localhost:8000/docs</span>. Exécuter <code>GET /health</code>, puis <code>GET /recommendations/{user_id}</code> avec l’identifiant de l’utilisateur de démonstration, sans le projeter ni le lire à voix haute. Si le temps le permet, essayer <code>GET /similar/{product_id}</code>.</p>
+    <div class="expected"><b>À observer :</b> HTTP 200 et modèles indiqués comme chargés dans <code>/health</code> ; une source telle que <code>hybrid</code>, <code>content_cold_start</code> ou <code>popularity_fallback</code> dans la réponse des recommandations.</div>
+    <div class="say"><span class="tag">À dire</span><p>« Le frontend appelle le service FastAPI et récupère des identifiants de produits, qu’il associe ensuite au catalogue. Le champ “source” permet de distinguer un résultat hybride d’un cas de démarrage à froid ou d’un repli par popularité. Je vérifie ainsi la réponse de l’API, pas seulement l’apparence de la page. »</p></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="time">4:35–5:00</span><h2>8. Conclure avec une limite maîtrisée</h2></div>
+    <div class="say"><span class="tag">À dire</span><p>« Le parcours relie donc l’interface, les interactions et le service de recommandation. La qualité dépend des données disponibles : avec peu d’historique, le système bascule vers le contenu récent ou la popularité. La prochaine étape d’évaluation consiste à mesurer régulièrement Precision@K et Recall@K sur des interactions fortes, comme les favoris, le panier et les achats. »</p></div>
+  </div>
+
+  <div class="warning">
+    <h3>Si le service ML ne répond pas</h3>
+    <p>Ne dites pas que la recommandation affichée vient du ML. Dites : « Le service ML est indisponible à cet instant. L’application dispose d’un repli côté frontend vers les recommandations Supabase, puis vers des produits disponibles. Je peux vous montrer le contrat de l’API et expliquer le parcours normal, mais cette exécution ne prouve pas un calcul ML en direct. »</p>
+  </div>
+
+  <div class="closing">
+    <h2>Phrase de clôture</h2>
+    <p>« Cette démonstration valide le parcours visible et l’intégration du moteur. Pour juger la pertinence du modèle, je complète le test fonctionnel par des métriques hors ligne et par l’analyse de ses limites de démarrage à froid. »</p>
+  </div>
+
+  <p class="footer-note">Les noms de routes et le comportement décrits correspondent au code du projet. La disponibilité et la réponse en direct dépendent du démarrage des services, des données et de la session de démonstration.</p>
+</body>
+</html>

@@ -114,6 +114,22 @@ export async function getProducts(params = {}) {
 
   return filterAndSortProducts(products, params);
 }
+export async function getTrendingProducts(topK = 5) {
+  const ml = await fetchMl(`/trending?top_k=${topK}`);
+  if (ml?.items?.length) {
+    const products = await hydrateProductIds(
+      ml.items.map(item => item.product_id),
+      [],
+    );
+    const availableProducts = products.filter(product => product.stock > 0);
+    if (availableProducts.length) {
+      return { products: availableProducts.slice(0, topK), source: "interaction_popularity" };
+    }
+  }
+
+  const newestProducts = await getProducts({ sort: "newest" });
+  return { products: newestProducts.slice(0, topK), source: "newest_fallback" };
+}
 export async function getProduct(id){ const {data,error}=await supabase.from('products').select(`${PRODUCT_SELECT},reviews(rating)`).eq('id',id).single(); if(error) return null; return {...mapProduct(data),rating:data.reviews?.length?data.reviews.reduce((a,r)=>a+Number(r.rating),0)/data.reviews.length:0,reviews:data.reviews?.length||0}; }
 export async function getRecommendations(){
   try {

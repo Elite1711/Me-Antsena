@@ -107,6 +107,11 @@ class SimilarResponse(BaseModel):
     items: List[RecommendationItem]
 
 
+class TrendingResponse(BaseModel):
+    source: str
+    items: List[RecommendationItem]
+
+
 class TrainResponse(BaseModel):
     status: str
     n_users: int
@@ -160,6 +165,40 @@ def health():
 def _popularity_items(cf, top_k: int) -> List[RecommendationItem]:
     ranked = cf.item_popularity_rank[:top_k] if cf is not None else []
     return [RecommendationItem(product_id=pid, score=0.0) for pid in ranked]
+
+
+def _trending_items(cf, products_by_id: dict, top_k: int) -> List[RecommendationItem]:
+    """Rank in-stock products by weighted interaction volume in the trained model."""
+    if cf is None or cf.interaction_matrix is None:
+        return []
+
+    scores = cf.interaction_matrix.sum(axis=0)
+    ranked = sorted(
+        (
+            (int(product_id), float(scores[index]))
+            for index, product_id in enumerate(cf.item_ids)
+            if float(scores[index]) > 0
+            and int(product_id) in products_by_id
+            and int(products_by_id[int(product_id)].get("stock") or 0) > 0
+        ),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    return [
+        RecommendationItem(product_id=product_id, score=score)
+        for product_id, score in ranked[:top_k]
+    ]
+
+
+@app.get("/trending", response_model=TrendingResponse)
+def get_trending(top_k: int = Query(10, ge=1, le=50)):
+    """Return globally popular in-stock products from trained interaction signals."""
+    cf = state["cf"]
+    if cf is None or cf.interaction_matrix is None:
+        raise HTTPException(503, "Modèle collaboratif non entraîné.")
+
+    items = _trending_items(cf, state["products_by_id"], top_k)
+    return TrendingResponse(source="interaction_popularity", items=items)
 
 
 @app.get("/recommendations/{user_id}", response_model=RecommendationResponse)

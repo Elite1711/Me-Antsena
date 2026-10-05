@@ -42,6 +42,7 @@ classement de popularité utilisé en repli pour le démarrage à froid.
 | GET     | `/health`                      | État du service et des modèles chargés                     |
 | GET     | `/recommendations/{user_id}?top_k=10` | Recommandations hybrides pour un utilisateur (repli popularité si utilisateur inconnu) |
 | GET     | `/similar/{product_id}?top_k=10`      | Produits similaires (content-based)                   |
+| GET     | `/trending?top_k=5`             | Produits en stock classés par volume pondéré d'interactions observées au dernier entraînement |
 | POST    | `/train`                       | Relance l'entraînement complet et recharge les modèles     |
 | GET     | `/evaluate?k=10&test_ratio=0.2`| Split train/test, entraîne un modèle temporaire et calcule Precision@K, Recall@K, RMSE |
 
@@ -67,6 +68,12 @@ Le frontend appelle le service lorsque `VITE_ML_SERVICE_URL` est configurée.
 Il hydrate les identifiants recommandés avec le catalogue Supabase et conserve
 un repli sur la table `recommendations`, puis sur les produits disponibles si
 le service ne répond pas.
+
+La section « Les plus populaires » de l'accueil utilise `/trending`, qui classe
+les produits en stock d'après la somme pondérée des interactions du dernier
+entraînement. Ce classement n'est donc pas temps réel : il est actualisé lors
+de `POST /train`. Si le service ML ne répond pas ou ne renvoie aucun produit,
+l'interface affiche une sélection de nouveautés et l'indique explicitement.
 
 ## Évaluation quantitative (Precision@K, Recall@K, RMSE)
 
