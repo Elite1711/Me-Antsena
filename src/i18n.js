@@ -68,6 +68,8 @@ export const translations = {
     basedOnCommunity: { Français: "Basé sur les habitudes de la communauté", Malagasy: "Miorina amin'ny fihetsika amin'ny vondrom-piarahamonina", English: "Based on community habits" },
     recentConsults: { Français: "Basé sur vos consultations récentes", Malagasy: "Miorina amin'ny fikarohana farany nataonao", English: "Based on your recent searches" },
     contentFiltering: { Français: "Filtrage basé sur le contenu", Malagasy: "Filterina mifototra amin'ny atiny", English: "Content-based filtering" },
+    contentRecommendationsUnavailable: { Français: "Les recommandations basées sur le contenu sont temporairement indisponibles.", Malagasy: "Tsy misy vonjimaika ny tolo-kevitra mifototra amin'ny atiny.", English: "Content-based recommendations are temporarily unavailable." },
+    noContentRecommendations: { Français: "Consultez quelques produits pour recevoir des suggestions basées sur vos intérêts.", Malagasy: "Jereo vokatra vitsivitsy mba hahazoana soso-kevitra mifanaraka amin'ny zavatra mahaliana anao.", English: "View a few products to get suggestions based on your interests." },
     trends: { Français: "Tendances du moment", Malagasy: "Lamboa ankehitriny", English: "Trending now" },
     globalPopularity: { Français: "Popularité globale", Malagasy: "Laza maneran-tany", English: "Global popularity" },
     mostPopular: { Français: "Les plus populaires", Malagasy: "Malaza indrindra", English: "Most popular" },

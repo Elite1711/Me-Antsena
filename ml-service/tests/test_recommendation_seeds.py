@@ -37,6 +37,11 @@ class FakeHybridModel:
         return [(3, 0.8)]
 
 
+class UnknownCollaborativeModel(FakeCollaborativeModel):
+    def is_known_user(self, user_id):
+        return False
+
+
 class RecommendationSeedTests(unittest.TestCase):
     def test_known_users_use_recent_interactions_as_content_seeds(self):
         collaborative = FakeCollaborativeModel()
@@ -55,8 +60,10 @@ class RecommendationSeedTests(unittest.TestCase):
 
         self.assertEqual(content.seed_ids, [12, 11])
         self.assertEqual(content.excluded_ids, [12, 11])
-        self.assertEqual([item.product_id for item in result.content], [3])
-        self.assertEqual(result.recently_viewed, [12])
+        self.assertEqual(
+            [(item.product_id, item.is_recently_viewed) for item in result.content],
+            [(12, True), (3, False)],
+        )
 
     def test_recently_viewed_ids_include_only_the_newest_distinct_viewed_products(self):
         interactions = [
@@ -68,3 +75,36 @@ class RecommendationSeedTests(unittest.TestCase):
         ]
 
         self.assertEqual(recently_viewed_product_ids(interactions), [12, 10])
+
+    def test_cold_start_content_response_includes_recent_view_as_ml_content_item(self):
+        collaborative = UnknownCollaborativeModel()
+        content = FakeContentModel()
+        interactions = [{"product_id": 12, "type": "view"}]
+        with (
+            patch.dict(main.state, {"cf": collaborative, "cb": content}),
+            patch.object(main, "get_supabase_client", return_value=object()),
+            patch.object(main, "fetch_user_interactions", return_value=interactions),
+        ):
+            result = main.get_recommendations("new-user", top_k=2)
+
+        self.assertEqual(result.source, "content_cold_start")
+        self.assertEqual(
+            [(item.product_id, item.is_recently_viewed) for item in result.content],
+            [(12, True), (3, False)],
+        )
+
+    def test_popularity_fallback_does_not_claim_content_recommendations(self):
+        class EmptyContentModel(FakeContentModel):
+            def recommend_from_history(self, seed_ids, top_k, exclude_product_ids):
+                return []
+
+        interactions = [{"product_id": None, "type": "search"}]
+        with (
+            patch.dict(main.state, {"cf": UnknownCollaborativeModel(), "cb": EmptyContentModel()}),
+            patch.object(main, "get_supabase_client", return_value=object()),
+            patch.object(main, "fetch_user_interactions", return_value=interactions),
+        ):
+            result = main.get_recommendations("new-user", top_k=2)
+
+        self.assertEqual(result.source, "popularity_fallback")
+        self.assertEqual(result.content, [])

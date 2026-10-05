@@ -91,6 +91,7 @@ app.add_middleware(
 class RecommendationItem(BaseModel):
     product_id: int
     score: float
+    is_recently_viewed: bool = False
 
 
 class RecommendationResponse(BaseModel):
@@ -192,6 +193,28 @@ def _trending_items(cf, products_by_id: dict, top_k: int) -> List[Recommendation
     ]
 
 
+def _content_items_with_recent_view(
+    recommendations: List[RecommendationItem],
+    recently_viewed_ids: List[int],
+    top_k: int,
+) -> List[RecommendationItem]:
+    recent_id = recently_viewed_ids[0] if recently_viewed_ids else None
+    items = []
+    if recent_id is not None:
+        items.append(
+            RecommendationItem(
+                product_id=recent_id,
+                score=0.0,
+                is_recently_viewed=True,
+            )
+        )
+    items.extend(
+        item for item in recommendations
+        if item.product_id != recent_id
+    )
+    return items[:top_k]
+
+
 @app.get("/trending", response_model=TrendingResponse)
 def get_trending(top_k: int = Query(10, ge=1, le=50)):
     """Return globally popular in-stock products from trained interaction signals."""
@@ -228,10 +251,14 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
         if cb.product_features is not None and seed_ids:
             cb_preds = cb.recommend_from_history(
                 seed_ids,
-                top_k=top_k * 2,
+                top_k=top_k,
                 exclude_product_ids=seed_ids,
             )
-        cb_items = [RecommendationItem(product_id=pid, score=score) for pid, score in cb_preds[:top_k]]
+        cb_items = _content_items_with_recent_view(
+            [RecommendationItem(product_id=pid, score=score) for pid, score in cb_preds],
+            recent_viewed_ids,
+            top_k,
+        )
 
         combined = state["hybrid"].recommend(cf_preds, cb_preds, top_k=top_k)
         if combined:
@@ -243,7 +270,6 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
             user_id=user_id,
             source="hybrid",
             items=hybrid_items,
-            recently_viewed=recent_viewed_ids,
             collaborative=cf_items or _popularity_items(cf, top_k),
             content=cb_items,
             hybrid=hybrid_items,
@@ -270,14 +296,17 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
     )
 
     popularity_items = _popularity_items(cf, top_k)
+    cb_items = _content_items_with_recent_view(
+        [RecommendationItem(product_id=pid, score=score) for pid, score in cb_preds],
+        recent_viewed_ids,
+        top_k,
+    )
 
-    if cb_preds:
-        cb_items = [RecommendationItem(product_id=pid, score=score) for pid, score in cb_preds]
+    if cb_items:
         return RecommendationResponse(
             user_id=user_id,
             source="content_cold_start",
             items=cb_items,
-            recently_viewed=recent_viewed_ids,
             collaborative=popularity_items,  # le collaboratif n'a structurellement aucun signal ici
             content=cb_items,
             hybrid=cb_items,
@@ -288,9 +317,8 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
         user_id=user_id,
         source="popularity_fallback",
         items=popularity_items,
-        recently_viewed=recent_viewed_ids,
         collaborative=popularity_items,
-        content=popularity_items,
+        content=[],
         hybrid=popularity_items,
     )
 
