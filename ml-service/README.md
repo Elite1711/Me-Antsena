@@ -68,6 +68,10 @@ Le frontend appelle le service lorsque `VITE_ML_SERVICE_URL` est configurée.
 Il hydrate les identifiants recommandés avec le catalogue Supabase et conserve
 un repli sur la table `recommendations`, puis sur les produits disponibles si
 le service ne répond pas.
+La réponse de `/recommendations/{user_id}` expose aussi `recently_viewed`
+(l'identifiant du produit le plus récemment consulté) afin que l'accueil puisse
+l'afficher dans la section content-based, à côté des produits similaires
+recommandés par le modèle.
 
 La section « Les plus populaires » de l'accueil utilise `/trending`, qui classe
 les produits en stock d'après la somme pondérée des interactions du dernier

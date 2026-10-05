@@ -113,6 +113,23 @@ def content_seed_product_ids(interactions: List[dict]) -> List[int]:
     return product_ids
 
 
+def recently_viewed_product_ids(interactions: List[dict]) -> List[int]:
+    """Return distinct product IDs from view interactions, newest first."""
+    product_ids = []
+    seen = set()
+    for interaction in interactions:
+        if (interaction.get("type") or "").lower() != "view":
+            continue
+        try:
+            product_id = int(interaction["product_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if product_id not in seen:
+            seen.add(product_id)
+            product_ids.append(product_id)
+    return product_ids
+
+
 def fetch_product_by_id(supabase_client, product_id: int) -> Optional[dict]:
     """Récupère un produit unique (pour l'indexation à la volée d'un item cold-start)."""
     resp = (

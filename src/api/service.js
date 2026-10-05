@@ -137,7 +137,12 @@ export async function getRecommendations(){
     if (user) {
       const ml = await fetchMl(`/recommendations/${user.id}?top_k=4`);
       if (ml && (ml.collaborative?.length || ml.content?.length || ml.hybrid?.length)) {
-        const allIds = [...new Set([...ml.collaborative, ...ml.content, ...ml.hybrid].map(i => i.product_id))];
+        const allIds = [...new Set([
+          ...(ml.recently_viewed || []),
+          ...ml.collaborative,
+          ...ml.content,
+          ...ml.hybrid,
+        ].map(item => typeof item === "number" ? item : item.product_id))];
         const hydrated = await hydrateProductIds(allIds, []);
         const byId = new Map(hydrated.map(p => [String(p.id), p]));
         const toProducts = list => (list || []).slice(0, 4).map(i => byId.get(String(i.product_id))).filter(Boolean);
@@ -145,6 +150,10 @@ export async function getRecommendations(){
           collaborative: toProducts(ml.collaborative),
           content: toProducts(ml.content),
           hybrid: toProducts(ml.hybrid),
+          recentlyViewed: (ml.recently_viewed || [])
+            .slice(0, 1)
+            .map(id => byId.get(String(id)))
+            .filter(Boolean),
         };
       }
     }
@@ -183,6 +192,7 @@ export async function getRecommendations(){
       collaborative: grouped.collaborative.slice(0, 4),
       content: grouped.content.slice(0, 4),
       hybrid: grouped.hybrid.slice(0, 4),
+      recentlyViewed: await getRecentlyViewedProduct(),
     };
   } catch {
     const products = await getProducts({ sort: 'rating' });
@@ -190,7 +200,30 @@ export async function getRecommendations(){
       collaborative: products.slice(0, 4),
       content: products.slice(0, 4),
       hybrid: products.slice(0, 4),
+      recentlyViewed: await getRecentlyViewedProduct(),
     };
+  }
+}
+async function getRecentlyViewedProduct() {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) throw new Error(authError.message);
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('interactions')
+      .select('product_id')
+      .eq('user_id', user.id)
+      .eq('type', 'view')
+      .not('product_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    if (!data?.[0]?.product_id) return [];
+    return hydrateProductIds([data[0].product_id], []);
+  } catch (error) {
+    console.error('Impossible de récupérer le produit consulté récemment.', error);
+    return [];
   }
 }
 export async function logInteraction(productId, type, value, metadata = {}) {

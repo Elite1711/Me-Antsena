@@ -6,6 +6,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import main
+from data import recently_viewed_product_ids
 
 
 class FakeCollaborativeModel:
@@ -55,3 +56,15 @@ class RecommendationSeedTests(unittest.TestCase):
         self.assertEqual(content.seed_ids, [12, 11])
         self.assertEqual(content.excluded_ids, [12, 11])
         self.assertEqual([item.product_id for item in result.content], [3])
+        self.assertEqual(result.recently_viewed, [12])
+
+    def test_recently_viewed_ids_include_only_the_newest_distinct_viewed_products(self):
+        interactions = [
+            {"product_id": 12, "type": "view"},
+            {"product_id": 12, "type": "view"},
+            {"product_id": 11, "type": "favorite"},
+            {"product_id": 10, "type": "view"},
+            {"product_id": None, "type": "view"},
+        ]
+
+        self.assertEqual(recently_viewed_product_ids(interactions), [12, 10])

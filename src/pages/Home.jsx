@@ -5,6 +5,7 @@ import { getCategories, getRecommendations, getTrendingProducts } from "../api/s
 import ProductCard from "../components/ProductCard";
 import SectionHeader from "../components/SectionHeader";
 import { useTranslation } from "../hooks/useTranslation";
+import { mergeRecentlyViewedProduct } from "../utils/recommendations";
 
 export default function Home() {
   const [data, setData] = useState({
@@ -39,7 +40,7 @@ export default function Home() {
       <div className="motion-stagger flex gap-3 overflow-x-auto pb-2">{data.categories.slice(0,8).map(c=><Link key={c.name} to={`/products?category=${encodeURIComponent(c.name)}`} className="min-w-28 rounded-2xl border border-brand-200/60 bg-white/85 p-4 text-center text-brand-800 shadow-sm backdrop-blur-md transition-all duration-500 transform hover:-translate-y-1 hover:scale-[1.02] hover:border-brand-300 hover:shadow-glow dark:border-white/10 dark:bg-night-surface/85 dark:text-white"><div className="text-2xl">{c.icon}</div><div className="mt-2 text-xs font-bold">{c.name}</div><div className="mt-1 text-[10px] text-slate-400">{c.count} {t("home.productsCount")}</div></Link>)}</div>
     </section>
     <section className="container-app py-8"><SectionHeader title={t("home.recommendedForYou")} subtitle={t("home.basedOnCommunity")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{data.recs?.hybrid.slice(0, 4).map(p=><ProductCard key={p.id} product={p} reason={t("home.recommendedForYou")} recommendationSource="home_hybrid"/>)}</div></section>
-    <section className="container-app py-8"><SectionHeader title={t("home.recentConsults")} subtitle={t("home.contentFiltering")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{data.recs?.content.slice(0, 4).map(p=><ProductCard key={p.id} product={p} reason={t("home.recentlyViewed")} recommendationSource="home_content"/>)}</div></section>
+    <section className="container-app py-8"><SectionHeader title={t("home.recentConsults")} subtitle={t("home.contentFiltering")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{mergeRecentlyViewedProduct(data.recs?.recentlyViewed, data.recs?.content).map(({product, isRecentlyViewed})=><ProductCard key={product.id} product={product} reason={t(isRecentlyViewed ? "home.recentlyViewed" : "home.contentFiltering")} recommendationSource={isRecentlyViewed ? undefined : "home_content"}/>)}</div></section>
     <section className="container-app py-8"><SectionHeader title={t(data.trending.source === "interaction_popularity" ? "home.mostPopular" : "home.newestFallback")} subtitle={t(data.trending.source === "interaction_popularity" ? "home.interactionPopularity" : "home.newestFallbackDescription")}/><div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">{data.trending.products.map(p=><ProductCard key={p.id} product={p}/>)}</div></section>
   </div>;
 }

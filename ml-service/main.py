@@ -37,6 +37,7 @@ from data import (
     fetch_products,
     fetch_user_interactions,
     get_supabase_client,
+    recently_viewed_product_ids,
 )
 from evaluation import run_evaluation
 from models import HybridRecommender
@@ -96,6 +97,7 @@ class RecommendationResponse(BaseModel):
     user_id: str
     source: str  # "hybrid" | "content_cold_start" | "popularity_fallback"
     items: List[RecommendationItem]
+    recently_viewed: List[int] = []
     # Décomposition par approche, pour la comparaison pédagogique (page Recommandations du frontend)
     collaborative: List[RecommendationItem] = []
     content: List[RecommendationItem] = []
@@ -214,10 +216,12 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
         cf_items = [RecommendationItem(product_id=pid, score=score) for pid, score in cf_preds[:top_k]]
 
         cb_preds: List[tuple] = []
+        recent_viewed_ids: List[int] = []
         try:
             supabase = get_supabase_client()
             recent = fetch_user_interactions(supabase, user_id)
             seed_ids = content_seed_product_ids(recent)
+            recent_viewed_ids = recently_viewed_product_ids(recent)[:1]
         except Exception as exc:  # noqa: BLE001
             logger.warning("Impossible de récupérer les interactions live de %s: %s", user_id, exc)
             seed_ids = []
@@ -239,6 +243,7 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
             user_id=user_id,
             source="hybrid",
             items=hybrid_items,
+            recently_viewed=recent_viewed_ids,
             collaborative=cf_items or _popularity_items(cf, top_k),
             content=cb_items,
             hybrid=hybrid_items,
@@ -249,10 +254,12 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
     # live de l'utilisateur (ex. inscrit puis a mis 2 favoris avant le prochain
     # /train) : c'est une recommandation personnalisée, pas de la popularité.
     seed_ids: List[int] = []
+    recent_viewed_ids: List[int] = []
     try:
         supabase = get_supabase_client()
         recent = fetch_user_interactions(supabase, user_id)
         seed_ids = content_seed_product_ids(recent)
+        recent_viewed_ids = recently_viewed_product_ids(recent)[:1]
     except Exception as exc:  # noqa: BLE001
         logger.warning("Impossible de récupérer les interactions live de %s: %s", user_id, exc)
 
@@ -270,6 +277,7 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
             user_id=user_id,
             source="content_cold_start",
             items=cb_items,
+            recently_viewed=recent_viewed_ids,
             collaborative=popularity_items,  # le collaboratif n'a structurellement aucun signal ici
             content=cb_items,
             hybrid=cb_items,
@@ -280,6 +288,7 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
         user_id=user_id,
         source="popularity_fallback",
         items=popularity_items,
+        recently_viewed=recent_viewed_ids,
         collaborative=popularity_items,
         content=popularity_items,
         hybrid=popularity_items,
