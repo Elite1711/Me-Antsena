@@ -25,11 +25,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import numpy as np
 
 from data import (
     content_seed_product_ids,
@@ -122,13 +123,28 @@ class TrainResponse(BaseModel):
 
 
 class EvaluationResponse(BaseModel):
+    protocol: str
+    split_strategy: str
+    dataset_mode: Literal["real", "synthetic"]
+    synthetic_source: str | None
     k: int
     test_ratio: float
+    actual_validation_ratio: float
+    actual_test_ratio: float
+    validation_timestamp: str
+    test_timestamp: str
+    n_users_with_three_periods: int
     n_train_interactions: int
+    n_validation_interactions: int
     n_test_interactions: int
     precision_at_k: float
     recall_at_k: float
+    ndcg_at_k: float
     n_users_evaluated_precision_recall: int
+    n_relevant_items_evaluated: int
+    n_relevant_items_excluded: int
+    methods: Dict[str, Dict[str, float]]
+    tuning: Dict[str, object]
     rmse: float
     n_pairs_evaluated_rmse: int
 
@@ -235,8 +251,13 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
         raise HTTPException(503, "Modèles non entraînés. Appeler POST /train d'abord.")
 
     if cf.is_known_user(user_id):
-        cf_preds = cf.predict(user_id, top_k=top_k * 2, cold_start_fallback=False)
-        cf_items = [RecommendationItem(product_id=pid, score=score) for pid, score in cf_preds[:top_k]]
+        user_index = cf.user_index[str(user_id)]
+        seen_item_ids = set()
+        if cf.interaction_matrix is not None:
+            seen_item_ids = {
+                int(cf.item_ids[index])
+                for index in np.flatnonzero(cf.interaction_matrix[user_index])
+            }
 
         cb_preds: List[tuple] = []
         recent_viewed_ids: List[int] = []
@@ -248,11 +269,22 @@ def get_recommendations(user_id: str, top_k: int = Query(10, ge=1, le=50)):
         except Exception as exc:  # noqa: BLE001
             logger.warning("Impossible de récupérer les interactions live de %s: %s", user_id, exc)
             seed_ids = []
+        seen_item_ids.update(seed_ids)
+
+        cf_preds = cf.predict(
+            user_id,
+            top_k=top_k * 2,
+            exclude_item_ids=seen_item_ids,
+            cold_start_fallback=False,
+        )
+        cf_items = [RecommendationItem(product_id=pid, score=score) for pid, score in cf_preds[:top_k]]
+
         if cb.product_features is not None and seed_ids:
+            content_exclusions = list(dict.fromkeys([*seen_item_ids, *seed_ids]))
             cb_preds = cb.recommend_from_history(
                 seed_ids,
                 top_k=top_k,
-                exclude_product_ids=seed_ids,
+                exclude_product_ids=content_exclusions,
             )
         cb_items = _content_items_with_recent_view(
             [RecommendationItem(product_id=pid, score=score) for pid, score in cb_preds],
@@ -362,17 +394,29 @@ def train():
 def evaluate(
     k: int = Query(10, ge=1, le=50),
     test_ratio: float = Query(0.2, gt=0.0, lt=0.9),
+    seed: int = Query(42, ge=0),
+    dataset: Literal["real", "synthetic"] = Query(
+        "real",
+        description=(
+            "synthetic is only for a clearly labeled evaluation fixture; "
+            "it is excluded from normal training and recommendations."
+        ),
+    ),
 ):
-    """Split train/test, entraîne un modèle temporaire et calcule Precision@K, Recall@K, RMSE.
+    """Compare quatre stratégies sur un holdout chronologique reproductible par utilisateur.
 
-    Utilise `cold_start_fallback=False` en interne (via evaluation.py) : seuls les
-    utilisateurs réellement connus du modèle entraîné sur le train set sont notés,
-    pour ne pas fausser les métriques avec des recommandations de repli.
-    N'affecte pas les artefacts de production servis par /recommendations.
+    L'évaluation exclut les produits déjà vus et garde les utilisateurs/produits
+    hors vocabulaire collaboratif hors des métriques de classement.
+    Elle n'affecte pas les artefacts de production servis par /recommendations.
     Chaque appel est archivé dans artifacts/evaluation_history.json.
     """
     try:
-        result = run_evaluation(k=k, test_ratio=test_ratio)
+        result = run_evaluation(
+            k=k,
+            test_ratio=test_ratio,
+            seed=seed,
+            dataset_mode=dataset,
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001

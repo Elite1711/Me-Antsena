@@ -44,7 +44,7 @@ classement de popularité utilisé en repli pour le démarrage à froid.
 | GET     | `/similar/{product_id}?top_k=10`      | Produits similaires (content-based)                   |
 | GET     | `/trending?top_k=5`             | Produits en stock classés par volume pondéré d'interactions observées au dernier entraînement |
 | POST    | `/train`                       | Relance l'entraînement complet et recharge les modèles     |
-| GET     | `/evaluate?k=10&test_ratio=0.2`| Split train/test, entraîne un modèle temporaire et calcule Precision@K, Recall@K, RMSE |
+| GET     | `/evaluate?k=10&test_ratio=0.2&seed=42&dataset=real`| Compare popularité, collaboratif, contenu et hybride sur des interactions réelles |
 
 Le champ `source` de `/recommendations` indique quelle stratégie a répondu :
 `"hybrid"` (utilisateur connu), `"content_cold_start"` (utilisateur inconnu du
@@ -81,20 +81,83 @@ entraînement. Ce classement n'est donc pas temps réel : il est actualisé lors
 de `POST /train`. Si le service ML ne répond pas ou ne renvoie aucun produit,
 l'interface affiche une sélection de nouveautés et l'indique explicitement.
 
-## Évaluation quantitative (Precision@K, Recall@K, RMSE)
+## Évaluation des recommandations
 
 ```bash
-curl "http://localhost:8000/evaluate?k=10&test_ratio=0.2"
+curl "http://localhost:8000/evaluate?k=5&test_ratio=0.2&seed=42"
 ```
 
-Ce endpoint :
-1. Récupère toutes les interactions depuis Supabase.
-2. Sépare aléatoirement 80 % train / 20 % test (par interaction).
-3. Entraîne un modèle collaboratif **temporaire** sur le train set (n'écrase pas `artifacts/collaborative.pkl` utilisé en production).
-4. Calcule :
-   - **Precision@K** / **Recall@K** : une interaction du test set compte comme "pertinente" si c'est un favori, un ajout au panier ou un achat (une simple vue est jugée trop faible signal). Seuls les utilisateurs déjà présents dans le train set sont évalués — un utilisateur inconnu relève du cold-start, traité comme une limite distincte au Chapitre 4, pas comme un échec du modèle.
-   - **RMSE** : écart entre le score prédit (produit scalaire des embeddings) et le poids réel de l'interaction (vue=1, favori=2, panier=2.5, achat=5).
-5. Archive chaque appel avec horodatage dans `artifacts/evaluation_history.json`, pour pouvoir citer l'évolution des métriques dans le mémoire sans relancer les calculs.
+L'évaluation récupère le catalogue et les interactions (avec `created_at`), puis
+crée trois périodes chronologiques par utilisateur en groupant par **jour UTC** :
+jours anciens pour l'entraînement, jours suivants pour la validation et derniers
+jours pour le test final. Plusieurs événements du même jour ne peuvent donc pas
+artificiellement compter comme des retours séparés. Le réglage est choisi sur la validation selon le NDCG@K
+hybride; le test final n'est utilisé qu'après ce choix. Les modèles sont
+temporaires et leur initialisation est reproductible avec `seed`; les artefacts
+de production ne sont pas remplacés. Les utilisateurs ayant moins de trois jours
+d'activité contribuent à l'entraînement, mais pas au réglage ni au test.
+
+Le endpoint compare **popularité**, **filtrage collaboratif**, **TF-IDF basé
+contenu** et **hybride** dans le catalogue courant. Les produits déjà vus par
+l'utilisateur sont exclus. Le collaboratif et la popularité ne peuvent classer
+que les produits présents dans les interactions d'entraînement; le contenu peut
+aussi classer les autres produits du catalogue. Les utilisateurs sans interaction
+d'entraînement et les événements pertinents portant sur un produit déjà vu ou
+absent du catalogue sont exclus et comptabilisés.
+L'hybride combine les rangs des deux listes (fusion réciproque des rangs,
+pondérée), plutôt que de comparer directement les scores CF et TF-IDF dont les
+échelles ne sont pas équivalentes. L'évaluation essaie cinq combinaisons de poids
+(contenu de 0 à 100 %, par pas de 25 %) et retourne les poids qui maximisent le
+NDCG@K sur la validation, ainsi que les scores correspondants sur le test final.
+Pour éviter de présenter une sélection aléatoire comme un réglage fiable, le
+service ne déclare un gagnant que si au moins cinq utilisateurs sont évaluables
+en validation et si un candidat obtient un NDCG@K positif. Sinon `tuning.status`
+explique le manque de signal (`no_validation_relevant_users`,
+`insufficient_validation_users` ou `no_validation_hits`), aucun poids n'est
+déclaré gagnant et le test rapporte le réglage par défaut
+(0.55 collaboratif / 0.45 contenu).
+
+Pour chaque méthode, la réponse fournit **Precision@K**, **Recall@K** et
+**NDCG@K**. Une interaction est pertinente si elle correspond à un favori, un
+ajout au panier ou un achat. Le **RMSE** collaboratif est conservé comme mesure
+complémentaire, uniquement sur les paires utilisateur-produit absentes du train.
+Les champs de métriques à la racine (`precision_at_k`, `recall_at_k`,
+`ndcg_at_k`) restent ceux du collaboratif pour compatibilité; l'objet `methods`
+contient les résultats des quatre méthodes.
+
+Les appels sont archivés dans `artifacts/evaluation_history.json` avec leur
+protocole, les coupures validation/test, les métriques et les effectifs.
+`tuning.selected_cf_weight` et `tuning.selected_cb_weight` sont des réglages
+proposés à partir de la validation; ils ne sont pas appliqués automatiquement au
+service de production. Les entrées archivées avant
+`per_user_train_validation_test_v3` viennent d'anciens protocoles et ne sont pas
+directement comparables.
+
+### Jeu synthétique isolé (test du pipeline uniquement)
+
+Si les utilisateurs réels ne donnent pas encore assez de données, le SQL
+[`scripts/seed_synthetic_evaluation.sql`](./scripts/seed_synthetic_evaluation.sql)
+peut créer un jeu marqué pour vérifier le protocole. Il utilise les profils de
+test existants `ml-seed-user<number>@example.com` (au moins 10 requis), ne crée
+pas de comptes Auth et ne touche pas aux autres profils. **Il supprime les
+interactions préexistantes de ces profils de test**, puis crée leur historique
+synthétique sur 28 jours. Vérifie le projet et les profils ciblés avant de
+l’exécuter; le SQL ne doit être lancé qu'une fois le code ML qui exclut le
+marqueur synthétique déployé et redémarré.
+
+Les lignes synthétiques portent
+`recommendation_source = 'synthetic_eval_v1'`. Le pipeline normal
+(`/train`, tendances et interactions live des utilisateurs) les exclut.
+Pour évaluer explicitement la fixture, appeler :
+
+```bash
+curl "http://localhost:8000/evaluate?k=5&test_ratio=0.2&seed=42&dataset=synthetic"
+```
+
+La réponse indique `dataset_mode: "synthetic"`. Ces résultats valident seulement
+que le code et le protocole fonctionnent sur un signal contrôlé ; ne les
+présente pas comme la performance du modèle sur les clients réels. L'option par
+défaut `dataset=real` exclut automatiquement ces événements marqués.
 
 Pour suivre l'évolution chaque semaine, planifiez un appel à l'endpoint avec le
 cron de votre hébergeur ou un ordonnanceur externe. Exemple de commande à
@@ -102,24 +165,19 @@ exécuter le lundi à 05:00 UTC :
 
 ```bash
 curl --fail --silent --show-error \
-  "https://<votre-service-ml>/evaluate?k=10&test_ratio=0.2"
+  "https://<votre-service-ml>/evaluate?k=5&test_ratio=0.2&seed=42"
 ```
 
 Chaque appel produit une nouvelle entrée horodatée dans l'historique du service.
 Après application de la migration Supabase, relancez aussi `POST /train` pour
 reconstruire les artefacts avec les marques, les prix et les tags normalisés.
 
-Un test de fumée sur données synthétiques (sans Supabase) permet de vérifier que le module fonctionne :
+Les tests synthétiques (sans Supabase) vérifient le split chronologique, les
+métriques et les quatre stratégies :
 
 ```bash
-python tests/test_evaluation.py
+python -m unittest discover -s tests -p 'test*.py' -v
 ```
-
-## Limites actuelles / travaux restants
-
-- Le split train/test est aléatoire par interaction, pas temporel : pour un
-  protocole plus rigoureux (et plus réaliste), un split par date serait
-  préférable si le volume de données le permet.
 
 ## Gestion du démarrage à froid (cold-start)
 

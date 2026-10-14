@@ -38,6 +38,7 @@ class CollaborativeFilteringModel:
         user_ids: Iterable[object],
         item_ids: Iterable[int],
         epochs: int = 40,
+        random_state: int | None = None,
     ):
         """Train the model using simple matrix factorization."""
         n_users, n_items = interaction_matrix.shape
@@ -80,8 +81,9 @@ class CollaborativeFilteringModel:
         popularity_order = np.argsort(popularity_scores)[::-1]
         self.item_popularity_rank = [self.item_ids[idx] for idx in popularity_order]
 
-        self.user_embeddings = np.random.normal(0, 0.1, (n_users, self.effective_dim))
-        self.item_embeddings = np.random.normal(0, 0.1, (n_items, self.effective_dim))
+        rng = np.random.default_rng(random_state)
+        self.user_embeddings = rng.normal(0, 0.1, (n_users, self.effective_dim))
+        self.item_embeddings = rng.normal(0, 0.1, (n_items, self.effective_dim))
 
         user_indices, item_indices = np.nonzero(interaction_matrix)
         for _ in range(epochs):
@@ -158,4 +160,3 @@ class CollaborativeFilteringModel:
         """Load model from disk."""
         with open(path, "rb") as file_obj:
             return pickle.load(file_obj)
-

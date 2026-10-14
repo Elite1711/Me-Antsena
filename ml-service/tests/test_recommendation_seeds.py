@@ -11,11 +11,18 @@ from data import recently_viewed_product_ids
 
 class FakeCollaborativeModel:
     item_popularity_rank = [9, 8]
+    user_index = {"known-user": 0}
+    item_ids = [1, 4]
+    interaction_matrix = [[1.0, 0.0]]
+
+    def __init__(self):
+        self.excluded_ids = None
 
     def is_known_user(self, user_id):
         return True
 
-    def predict(self, user_id, top_k, cold_start_fallback):
+    def predict(self, user_id, top_k, cold_start_fallback, exclude_item_ids=None):
+        self.excluded_ids = exclude_item_ids
         return [(1, 0.9), (2, 0.8)]
 
 
@@ -59,7 +66,8 @@ class RecommendationSeedTests(unittest.TestCase):
             result = main.get_recommendations("known-user", top_k=2)
 
         self.assertEqual(content.seed_ids, [12, 11])
-        self.assertEqual(content.excluded_ids, [12, 11])
+        self.assertEqual(collaborative.excluded_ids, {1, 11, 12})
+        self.assertCountEqual(content.excluded_ids, [1, 12, 11])
         self.assertEqual(
             [(item.product_id, item.is_recently_viewed) for item in result.content],
             [(12, True), (3, False)],

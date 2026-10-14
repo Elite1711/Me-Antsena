@@ -17,6 +17,7 @@ INTERACTION_WEIGHTS = {
     "purchase": 5.0,
 }
 CONTENT_SEED_TYPES = frozenset(INTERACTION_WEIGHTS)
+SYNTHETIC_EVALUATION_SOURCE = "synthetic_eval_v1"
 
 
 def get_supabase_client():
@@ -54,14 +55,23 @@ def fetch_products(supabase_client) -> List[dict]:
     return products
 
 
-def fetch_interactions(supabase_client) -> List[dict]:
-    """Récupère les interactions produit utilisées par l'entraînement et l'évaluation."""
-    resp = (
+def fetch_interactions(
+    supabase_client, include_synthetic_evaluation: bool = False
+) -> List[dict]:
+    """Fetch production interactions, excluding the opt-in synthetic fixture by default."""
+    query = (
         supabase_client.table("interactions")
-        .select("user_id, product_id, type")
+        .select("user_id, product_id, type, created_at, recommendation_source")
         .in_("type", sorted(INTERACTION_WEIGHTS))
-        .execute()
     )
+    if include_synthetic_evaluation:
+        query = query.eq("recommendation_source", SYNTHETIC_EVALUATION_SOURCE)
+    else:
+        query = query.or_(
+            f"recommendation_source.is.null,"
+            f"recommendation_source.neq.{SYNTHETIC_EVALUATION_SOURCE}"
+        )
+    resp = query.execute()
     error = getattr(resp, "error", None)
     if error:
         raise RuntimeError(f"Erreur Supabase (interactions): {getattr(error, 'message', error)}")
@@ -70,6 +80,10 @@ def fetch_interactions(supabase_client) -> List[dict]:
         for interaction in (getattr(resp, "data", None) or [])
         if interaction.get("product_id") is not None
         and (interaction.get("type") or "view").lower() in INTERACTION_WEIGHTS
+        and (
+            (interaction.get("recommendation_source") == SYNTHETIC_EVALUATION_SOURCE)
+            == include_synthetic_evaluation
+        )
     ]
 
 
@@ -86,6 +100,10 @@ def fetch_user_interactions(supabase_client, user_id: str) -> List[dict]:
         .select("product_id, type, created_at")
         .eq("user_id", user_id)
         .in_("type", sorted(CONTENT_SEED_TYPES))
+        .or_(
+            f"recommendation_source.is.null,"
+            f"recommendation_source.neq.{SYNTHETIC_EVALUATION_SOURCE}"
+        )
         .order("created_at", desc=True)
         .limit(50)
         .execute()

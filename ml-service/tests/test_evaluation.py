@@ -1,76 +1,195 @@
-"""Test de fumée du module d'évaluation (evaluation.py), sur données synthétiques.
-
-Ne nécessite pas de connexion Supabase : sert à vérifier que le calcul de
-Precision@K, Recall@K et RMSE fonctionne correctement avant de le lancer sur
-les vraies données de production.
-
-Exécution :
-    python tests/test_evaluation.py
-"""
+"""Tests for chronological recommendation evaluation without a Supabase connection."""
 
 import os
 import random
 import sys
+import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data import build_interaction_matrix
-from evaluation import precision_recall_at_k, rmse, train_test_split_interactions
-from models import CollaborativeFilteringModel
+from evaluation import (
+    METHOD_NAMES,
+    _ranking_metrics,
+    chronological_train_validation_test_split,
+    run_evaluation,
+)
+from models import HybridRecommender
 
 
-def make_synthetic_interactions(seed: int = 0):
-    """Génère deux groupes d'utilisateurs aux goûts homogènes, pour produire un vrai
-    signal collaboratif exploitable (contrairement à des préférences purement aléatoires)."""
+def make_synthetic_data(seed: int = 0):
     rng = random.Random(seed)
-    cluster_a_items = list(range(1, 11))
-    cluster_b_items = list(range(11, 21))
-
+    products = [
+        {"id": product_id, "name": f"Product audio {product_id}", "category_name": "Electronics"}
+        for product_id in range(1, 21)
+    ]
     interactions = []
-    for i in range(20):
-        uid = f"userA{i}"
-        for pid in rng.sample(cluster_a_items, 7):
+    for group_name, product_ids in (
+        ("A", list(range(1, 11))),
+        ("B", list(range(11, 21))),
+    ):
+        for user_index in range(20):
+            chosen = rng.sample(product_ids, 7)
+            for product_id in chosen[:4]:
+                interactions.append(
+                    {
+                        "user_id": f"user{group_name}{user_index}",
+                        "product_id": product_id,
+                        "type": rng.choice(["favorite", "purchase", "add_to_cart"]),
+                        "created_at": "2025-01-01T00:00:00Z",
+                    }
+                )
             interactions.append(
-                {"user_id": uid, "product_id": pid, "type": rng.choice(["favorite", "purchase", "add_to_cart"])}
+                {
+                    "user_id": f"user{group_name}{user_index}",
+                    "product_id": chosen[4],
+                    "type": rng.choice(["favorite", "purchase", "add_to_cart"]),
+                    "created_at": "2025-02-01T00:00:00Z",
+                }
             )
-    for i in range(20):
-        uid = f"userB{i}"
-        for pid in rng.sample(cluster_b_items, 7):
-            interactions.append(
-                {"user_id": uid, "product_id": pid, "type": rng.choice(["favorite", "purchase", "add_to_cart"])}
-            )
-    return interactions
+            for product_id in chosen[5:]:
+                interactions.append(
+                    {
+                        "user_id": f"user{group_name}{user_index}",
+                        "product_id": product_id,
+                        "type": rng.choice(["favorite", "purchase", "add_to_cart"]),
+                        "created_at": "2025-03-01T00:00:00Z",
+                    }
+                )
+    return products, interactions
 
 
-def main():
-    interactions = make_synthetic_interactions()
-    train, test = train_test_split_interactions(interactions, test_ratio=0.25, seed=1)
+class EvaluationTests(unittest.TestCase):
+    def test_three_way_split_keeps_equal_timestamps_together(self):
+        interactions = [
+            {"user_id": "user", "created_at": "2025-03-01T00:00:00Z", "id": 4},
+            {"user_id": "user", "created_at": "2025-01-01T00:00:00Z", "id": 1},
+            {"user_id": "user", "created_at": "2025-03-01T00:00:00Z", "id": 5},
+            {"user_id": "user", "created_at": "2025-02-01T00:00:00Z", "id": 3},
+            {"user_id": "user", "created_at": "2025-01-01T00:00:00Z", "id": 2},
+        ]
 
-    mat, user_ids, item_ids = build_interaction_matrix(train)
-    assert mat.size > 0, "La matrice d'entraînement ne doit pas être vide"
+        train, validation, test, metadata = chronological_train_validation_test_split(
+            interactions, test_ratio=0.25
+        )
 
-    cf = CollaborativeFilteringModel()
-    cf.fit(mat, user_ids, item_ids, epochs=40)
+        self.assertEqual([item["id"] for item in train], [1, 2])
+        self.assertEqual([item["id"] for item in validation], [3])
+        self.assertEqual([item["id"] for item in test], [4, 5])
+        self.assertEqual(metadata["validation_timestamp"], "2025-02-01")
+        self.assertEqual(metadata["test_timestamp"], "2025-03-01")
 
-    precision, recall, n_users = precision_recall_at_k(cf, test, k=5)
-    rmse_value, n_pairs = rmse(cf, test)
+    def test_three_way_split_requires_timestamps(self):
+        with self.assertRaisesRegex(ValueError, "created_at"):
+            chronological_train_validation_test_split([{"id": 1}, {"id": 2}])
 
-    print(f"Precision@5 = {precision:.4f}")
-    print(f"Recall@5    = {recall:.4f}")
-    print(f"RMSE        = {rmse_value:.4f}")
-    print(f"Utilisateurs évalués (precision/recall) = {n_users}")
-    print(f"Paires évaluées (rmse)                  = {n_pairs}")
+    def test_interactions_from_one_day_cannot_fill_three_temporal_periods(self):
+        interactions = [
+            {
+                "user_id": "same-day-user",
+                "product_id": product_id,
+                "type": "view",
+                "created_at": f"2025-01-01T00:00:{second:02d}Z",
+            }
+            for product_id, second in enumerate((1, 2, 3), start=1)
+        ]
 
-    # Avec un signal collaboratif clair entre utilisateurs d'un même groupe, on
-    # s'attend à un rappel nettement supérieur à ce que donnerait un tirage aléatoire.
-    assert n_users > 0, "Aucun utilisateur évalué : split ou données insuffisantes"
-    assert n_pairs > 0, "Aucune paire évaluée pour le RMSE"
-    assert recall > 0.2, f"Rappel anormalement bas pour un signal collaboratif clair: {recall}"
-    assert 0.0 <= precision <= 1.0
-    assert rmse_value >= 0.0
+        with self.assertRaisesRegex(ValueError, "trois périodes temporelles"):
+            chronological_train_validation_test_split(interactions)
 
-    print("\nOK — le module d'évaluation fonctionne correctement.")
+    def test_ranking_metrics_calculate_precision_recall_and_ndcg(self):
+        precision, recall, ndcg = _ranking_metrics([7, 8, 9], {7, 9}, k=3)
+
+        self.assertAlmostEqual(precision, 2 / 3)
+        self.assertEqual(recall, 1.0)
+        self.assertGreater(ndcg, 0.9)
+        self.assertLessEqual(ndcg, 1.0)
+
+    def test_hybrid_fuses_rankings_without_comparing_incompatible_scores(self):
+        result = HybridRecommender(cf_weight=1.0, cb_weight=0.0).recommend(
+            [(1, -2.0), (2, -1.0)], [], top_k=2
+        )
+
+        self.assertEqual([product_id for product_id, _ in result], [1, 2])
+
+    def test_evaluation_compares_four_methods_reproducibly(self):
+        products, interactions = make_synthetic_data()
+        with (
+            patch("evaluation.get_supabase_client", return_value=object()),
+            patch("evaluation.fetch_products", return_value=products),
+            patch("evaluation.fetch_interactions", return_value=interactions),
+        ):
+            first = run_evaluation(k=5, test_ratio=0.25, seed=17)
+            second = run_evaluation(k=5, test_ratio=0.25, seed=17)
+
+        from main import EvaluationResponse
+
+        response = EvaluationResponse(**first)
+        self.assertEqual(first, second)
+        self.assertEqual(first["protocol"], "per_user_train_validation_test_v3")
+        self.assertEqual(set(first["methods"]), set(METHOD_NAMES))
+        self.assertEqual(set(response.methods), set(METHOD_NAMES))
+        self.assertEqual(
+            first["tuning"]["selection_metric"], "validation_hybrid_ndcg_at_k"
+        )
+        self.assertEqual(
+            first["tuning"]["selected_cf_weight"]
+            + first["tuning"]["selected_cb_weight"],
+            1.0,
+        )
+        self.assertEqual(first["tuning"]["status"], "selected")
+        self.assertEqual(first["n_users_with_three_periods"], 40)
+        self.assertEqual(first["n_users_evaluated_precision_recall"], 40)
+        self.assertGreater(first["n_relevant_items_evaluated"], 0)
+        for metrics in first["methods"].values():
+            self.assertTrue(0.0 <= metrics["precision_at_k"] <= 1.0)
+            self.assertTrue(0.0 <= metrics["recall_at_k"] <= 1.0)
+            self.assertTrue(0.0 <= metrics["ndcg_at_k"] <= 1.0)
+
+    def test_tuning_does_not_claim_a_winner_with_too_few_validation_users(self):
+        products, interactions = make_synthetic_data()
+        eligible_users = {"userA0", "userA1", "userB0", "userB1"}
+        interactions = [
+            interaction
+            for interaction in interactions
+            if interaction["user_id"] in eligible_users
+        ]
+        with (
+            patch("evaluation.get_supabase_client", return_value=object()),
+            patch("evaluation.fetch_products", return_value=products),
+            patch("evaluation.fetch_interactions", return_value=interactions),
+        ):
+            result = run_evaluation(k=5, test_ratio=0.25, seed=17)
+
+        self.assertEqual(result["tuning"]["status"], "insufficient_validation_users")
+        self.assertIsNone(result["tuning"]["selected_cf_weight"])
+        self.assertEqual(
+            result["tuning"]["test_weights_used"]["source"], "default_fallback"
+        )
+
+    def test_evaluation_reports_missing_validation_relevance_without_error(self):
+        products, interactions = make_synthetic_data()
+        interactions = [
+            {
+                **interaction,
+                "type": "view" if interaction["created_at"] == "2025-02-01T00:00:00Z"
+                else interaction["type"],
+            }
+            for interaction in interactions
+        ]
+        with (
+            patch("evaluation.get_supabase_client", return_value=object()),
+            patch("evaluation.fetch_products", return_value=products),
+            patch("evaluation.fetch_interactions", return_value=interactions),
+        ):
+            result = run_evaluation(k=5, test_ratio=0.25, seed=17)
+
+        self.assertEqual(result["tuning"]["status"], "no_validation_relevant_users")
+        self.assertEqual(result["tuning"]["n_users_evaluated"], 0)
+        self.assertEqual(
+            result["tuning"]["test_weights_used"]["source"], "default_fallback"
+        )
 
 
 if __name__ == "__main__":
-    main()
+    unittest.main()
