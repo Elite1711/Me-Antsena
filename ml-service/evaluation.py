@@ -7,7 +7,6 @@ import numpy as np
 
 from data import (
     INTERACTION_WEIGHTS,
-    SYNTHETIC_EVALUATION_SOURCE,
     build_interaction_matrix,
     fetch_interactions,
     fetch_products,
@@ -301,17 +300,11 @@ def run_evaluation(
     test_ratio: float = 0.2,
     epochs: int = 20,
     seed: int = 42,
-    dataset_mode: str = "real",
 ) -> dict:
-    """Tune hybrid weights on validation, then report a separate temporal test."""
-    if dataset_mode not in ("real", "synthetic"):
-        raise ValueError("dataset_mode doit être 'real' ou 'synthetic'.")
+    """Evaluate the recommendation strategies on platform interactions only."""
     supabase = get_supabase_client()
     products = fetch_products(supabase)
-    interactions = fetch_interactions(
-        supabase,
-        include_synthetic_evaluation=(dataset_mode == "synthetic"),
-    )
+    interactions = fetch_interactions(supabase)
     if not products:
         raise ValueError("Le catalogue produits est vide; impossible d'évaluer le contenu.")
 
@@ -416,10 +409,6 @@ def run_evaluation(
     return {
         "protocol": "per_user_train_validation_test_v3",
         "split_strategy": "latest_utc_day_groups_per_user",
-        "dataset_mode": dataset_mode,
-        "synthetic_source": (
-            SYNTHETIC_EVALUATION_SOURCE if dataset_mode == "synthetic" else None
-        ),
         "k": k,
         "test_ratio": test_ratio,
         "actual_validation_ratio": round(

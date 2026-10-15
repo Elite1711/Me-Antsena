@@ -6,7 +6,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from data import (
-    SYNTHETIC_EVALUATION_SOURCE,
+    EXCLUDED_RECOMMENDATION_SOURCE,
     build_interaction_matrix,
     content_seed_product_ids,
     fetch_interactions,
@@ -15,7 +15,7 @@ from evaluation import _relevant_items_by_user
 
 
 class InteractionSignalTests(unittest.TestCase):
-    def test_synthetic_interactions_are_opt_in_and_tagged(self):
+    def test_legacy_evaluation_rows_are_always_excluded(self):
         class FakeQuery:
             def __init__(self):
                 self.filters = []
@@ -30,39 +30,35 @@ class InteractionSignalTests(unittest.TestCase):
                 self.filters.append(("or", expression))
                 return self
 
-            def eq(self, field, value):
-                self.filters.append(("eq", field, value))
-                return self
-
             def execute(self):
                 rows = [
                     {"user_id": "real", "product_id": 1, "type": "view"},
                     {
-                        "user_id": "synthetic",
+                        "user_id": "legacy_fixture",
                         "product_id": 2,
                         "type": "view",
-                        "recommendation_source": SYNTHETIC_EVALUATION_SOURCE,
+                        "recommendation_source": EXCLUDED_RECOMMENDATION_SOURCE,
                     },
                 ]
-                if any(
-                    filter_item[:2] == ("eq", "recommendation_source")
-                    for filter_item in self.filters
-                ):
-                    rows = [rows[1]]
-                else:
-                    rows = [rows[0]]
                 return SimpleNamespace(data=rows, error=None)
 
         class FakeClient:
+            def __init__(self):
+                self.query = FakeQuery()
+
             def table(self, _table_name):
-                return FakeQuery()
+                return self.query
 
         client = FakeClient()
         real_rows = fetch_interactions(client)
-        synthetic_rows = fetch_interactions(client, include_synthetic_evaluation=True)
 
         self.assertEqual([row["user_id"] for row in real_rows], ["real"])
-        self.assertEqual([row["user_id"] for row in synthetic_rows], ["synthetic"])
+        self.assertTrue(
+            any(
+                EXCLUDED_RECOMMENDATION_SOURCE in expression
+                for _, expression in client.query.filters
+            )
+        )
 
     def test_search_events_do_not_create_matrix_users_or_items(self):
         interactions = [

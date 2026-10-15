@@ -44,7 +44,7 @@ classement de popularité utilisé en repli pour le démarrage à froid.
 | GET     | `/similar/{product_id}?top_k=10`      | Produits similaires (content-based)                   |
 | GET     | `/trending?top_k=5`             | Produits en stock classés par volume pondéré d'interactions observées au dernier entraînement |
 | POST    | `/train`                       | Relance l'entraînement complet et recharge les modèles     |
-| GET     | `/evaluate?k=10&test_ratio=0.2&seed=42&dataset=real`| Compare popularité, collaboratif, contenu et hybride sur des interactions réelles |
+| GET     | `/evaluate?k=10&test_ratio=0.2&seed=42`| Compare popularité, collaboratif, contenu et hybride sur les interactions de la plateforme |
 
 Le champ `source` de `/recommendations` indique quelle stratégie a répondu :
 `"hybrid"` (utilisateur connu), `"content_cold_start"` (utilisateur inconnu du
@@ -133,31 +133,14 @@ service de production. Les entrées archivées avant
 `per_user_train_validation_test_v3` viennent d'anciens protocoles et ne sont pas
 directement comparables.
 
-### Jeu synthétique isolé (test du pipeline uniquement)
+### Provenance des données d'évaluation
 
-Si les utilisateurs réels ne donnent pas encore assez de données, le SQL
-[`scripts/seed_synthetic_evaluation.sql`](./scripts/seed_synthetic_evaluation.sql)
-peut créer un jeu marqué pour vérifier le protocole. Il utilise les profils de
-test existants `ml-seed-user<number>@example.com` (au moins 10 requis), ne crée
-pas de comptes Auth et ne touche pas aux autres profils. **Il supprime les
-interactions préexistantes de ces profils de test**, puis crée leur historique
-synthétique sur 28 jours. Vérifie le projet et les profils ciblés avant de
-l’exécuter; le SQL ne doit être lancé qu'une fois le code ML qui exclut le
-marqueur synthétique déployé et redémarré.
-
-Les lignes synthétiques portent
-`recommendation_source = 'synthetic_eval_v1'`. Le pipeline normal
-(`/train`, tendances et interactions live des utilisateurs) les exclut.
-Pour évaluer explicitement la fixture, appeler :
-
-```bash
-curl "http://localhost:8000/evaluate?k=5&test_ratio=0.2&seed=42&dataset=synthetic"
-```
-
-La réponse indique `dataset_mode: "synthetic"`. Ces résultats valident seulement
-que le code et le protocole fonctionnent sur un signal contrôlé ; ne les
-présente pas comme la performance du modèle sur les clients réels. L'option par
-défaut `dataset=real` exclut automatiquement ces événements marqués.
+`/evaluate` utilise exclusivement le catalogue et les interactions enregistrés
+sur la plateforme. Les interactions conservant l'ancien marqueur
+`synthetic_eval_v1` sont systématiquement exclues, y compris si elles sont
+encore présentes dans Supabase. Si les données réelles ne suffisent pas à former
+les périodes temporelles requises, l'endpoint renvoie une erreur explicite :
+aucun résultat de test n'est présenté comme une mesure de performance réelle.
 
 Pour suivre l'évolution chaque semaine, planifiez un appel à l'endpoint avec le
 cron de votre hébergeur ou un ordonnanceur externe. Exemple de commande à
@@ -172,8 +155,9 @@ Chaque appel produit une nouvelle entrée horodatée dans l'historique du servic
 Après application de la migration Supabase, relancez aussi `POST /train` pour
 reconstruire les artefacts avec les marques, les prix et les tags normalisés.
 
-Les tests synthétiques (sans Supabase) vérifient le split chronologique, les
-métriques et les quatre stratégies :
+Les tests unitaires isolés vérifient le split chronologique, les métriques et les
+règles de filtrage des interactions. Leurs jeux de test ne sont jamais utilisés
+pour l'entraînement, l'évaluation de production ou les résultats du mémoire :
 
 ```bash
 python -m unittest discover -s tests -p 'test*.py' -v

@@ -25,7 +25,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Dict, List, Literal
+from typing import Dict, List
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -125,8 +125,6 @@ class TrainResponse(BaseModel):
 class EvaluationResponse(BaseModel):
     protocol: str
     split_strategy: str
-    dataset_mode: Literal["real", "synthetic"]
-    synthetic_source: str | None
     k: int
     test_ratio: float
     actual_validation_ratio: float
@@ -395,13 +393,6 @@ def evaluate(
     k: int = Query(10, ge=1, le=50),
     test_ratio: float = Query(0.2, gt=0.0, lt=0.9),
     seed: int = Query(42, ge=0),
-    dataset: Literal["real", "synthetic"] = Query(
-        "real",
-        description=(
-            "synthetic is only for a clearly labeled evaluation fixture; "
-            "it is excluded from normal training and recommendations."
-        ),
-    ),
 ):
     """Compare quatre stratégies sur un holdout chronologique reproductible par utilisateur.
 
@@ -415,7 +406,6 @@ def evaluate(
             k=k,
             test_ratio=test_ratio,
             seed=seed,
-            dataset_mode=dataset,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

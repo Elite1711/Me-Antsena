@@ -100,7 +100,7 @@ npm run lint    # ESLint (config dans eslint.config.js)
 cd ml-service
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python tests/test_evaluation.py   # test de fumée sur données synthétiques, sans Supabase
+python -m unittest discover -s tests -p 'test*.py' -v   # tests unitaires isolés, sans Supabase
 ```
 
 Pour un test bout-en-bout avec de vraies données (entraînement, endpoints,
